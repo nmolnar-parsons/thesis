@@ -47,6 +47,7 @@ Available , Main Collection ; GV1469.37 .I53 2020
 - Huntemann, Nina, and Ben Aslinger, eds. _Gaming globally: Production, play, and place._ Springer, 2016. **GV1469.34.S52G35 2013** (Read Chapter 1)
 - Entertainment Software Association, and Entertainment Software Association. "sales, demographic and usage data: Essential facts about the computer and video game industry." Washington, DC (2014).
 
-
+## Brainstorming Activity
+![Concept development and brainstorming](https://github.com/nmolnar-parsons/thesis/blob/fe161eee76ae87c266e9dc0405664f91b365206d/brainstorm.png)
 
 
