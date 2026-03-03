@@ -2,7 +2,7 @@
 
 
 
-![Design_Mockup]()
+![Design_Mockup](https://github.com/nmolnar-parsons/thesis/blob/20891824ac2dee7c0afa0aa49e69c4499053d9ef/Concepts_Sketches/Thesis%20Design%20Mockup.png)
 "Flying Fish" Data Visualization, using NOAA recorded weight (in kg) of import/export data for fish products, ranging from 1980-2025. Data can be broken down by country of origin, product, destination (by USA customs area). I would integrate the ICAO (or ICEC) Carbon Emissions Calculator to calculate the carbon emissions cost of transporting fish by air by making a few (resonable) assumptions about origin and destination airports.
 This visualization would appear in the first third of the visual portion of the thesis and is geared towards people with little background in the international fish trade. It's meant to highlight the scale and geographical chaos of shipping fish.
 
