@@ -4,14 +4,20 @@ Parons MSDV Thesis repository
 
 ## Abstract
 Title: _The Last Sushi Roll in the World_ 
-_The Sushi of Theseus/The Genealogy of Sushi_
+Alternative: _The Sushi of Theseus_
 
-
+The story of sushi is the story of the world’s globalization. The economic, logistical, and cultural entanglement of nations across the world has transformed a niche cuisine (that is bizarre to most cultures and palettes) into one of the most desired and iconic foodstuffs of the modern age. Sushi has turned tuna — once a junk fish in most countries outside of Japan — into one of the most expensive meats on the planet. However, the ravenous appetite for this cuisine and the uncertain future of the oceans in a climate change future threaten to imperil the whole operation. When will these resources run out - when will the last sushi roll be made? Using data from fisheries/agriculture (population, price, climate change effects), consumer trends (price, consumer tastes), and logistical realities (geography, logistical costs), this thesis will determine the future availability of critical sushi ingredients (fish, rice, seaweed) and discuss local and global alternatives based on historical culinary practices. This thesis will address the current situation and potential futures of sushi from a consumer’s perspective — where do the ingredients you’re eating come from? Will you be able to eat this in the future? — and from a producer’s perspective — what is still considered sushi? What alternatives are available and will consumers be willing to eat them?
 
 ## Introduction
 
 
+
 ##### References:
+
+Issenberg, Sasha. The Sushi Economy: Globalization and the Making of a Modern Delicacy. 1. print. Gotham, 2007.
+
+Bestor, Theodore C. Tsukiji: The Fish Market at the Center of the World. Nachdr. California Studies in Food and Culture 11. University of California Press, 2008.
+
 
 
 ## Literature Review
