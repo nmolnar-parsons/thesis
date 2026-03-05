@@ -1,0 +1,16 @@
+{
+  "hostRequirements": {
+    "cpus": 2
+  },
+  "waitFor": "onCreateCommand",
+  "customizations": {
+    "codespaces": { "openFiles": [] },
+    "vscode": {
+      "extensions": [
+        "esbenp.prettier-vscode",
+        "Vue.volar",
+        "ritwickdey.liveserver"
+      ]
+    }
+  }
+}
