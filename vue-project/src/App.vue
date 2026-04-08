@@ -1,11 +1,19 @@
-<script setup></script>
+<script setup>
+import SectionIntro from './sections/SectionIntro.vue'
+import SectionMap from './sections/SectionMap.vue'
+import SectionBreakdown from './sections/SectionBreakdown.vue'
+import SectionShippingPricing from './sections/SectionShippingPricing.vue'
+import SectionTitle from './sections/SectionTitle.vue'
+import SectionFutures from './sections/SectionFutures.vue'
+</script>
 
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <main class="story-page">
+    <SectionTitle />
+    <SectionIntro />
+    <SectionBreakdown />
+    <SectionShippingPricing />
+    <SectionMap />
+    <SectionFutures />
+  </main>
 </template>
-
-<style scoped></style>

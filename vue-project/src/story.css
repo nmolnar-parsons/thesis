@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.45;
+  font-weight: 400;
+  color: #1f2937;
+  background: #f8fafc;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f8fafc;
+}
+
+a {
+  color: #2563eb;
+}
+
+#app {
+  width: 100%;
+}
+
+.story-page {
+  width: min(1400px, 100%);
+  margin: 0 auto;
+}
+
+/* Default layout for basic copy inside a 12-column SectionGrid. Override in section scoped styles when needed. */
+.story-copy {
+  grid-column: 4 / span 6;
+  align-self: center;
+}
+
+.story-copy--top {
+  margin-top: 0.5rem;
+}
+
+.story-copy--bottom {
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 980px) {
+  .story-copy {
+    grid-column: 2 / span 10;
+  }
+}
