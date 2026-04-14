@@ -1,5 +1,5 @@
 <script setup>
-const props = defineProps({
+defineProps({
   columns: { type: Number, default: 12 },
   gap: { type: String, default: '1rem' },
   align: { type: String, default: 'stretch' },

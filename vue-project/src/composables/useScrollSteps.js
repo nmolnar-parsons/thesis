@@ -11,8 +11,9 @@ export function useScrollSteps(options = {}) {
 
     scroller
       .setup({
-        container: containerEl,
         step: `${stepSelector}`,
+        parent: containerEl,
+        container: containerEl,
         offset: options.offset ?? 0.55,
         progress: true,
       })
