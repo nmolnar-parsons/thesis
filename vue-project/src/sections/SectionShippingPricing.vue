@@ -6,7 +6,7 @@ import D3ScatterVisual from '../visuals/D3ScatterVisual.vue'
 </script>
 
 <template>
-  <StorySection id="shipping-pricing" height="min-screen" width="wide" background="#f8fafc">
+  <StorySection id="shipping-pricing" height="min-screen" width="wide" background="#e2e8f0">
     <SectionGrid :columns="12" gap="1rem">
       <div class="copy-col">
         <CopyBlock eyebrow="Shipping & Pricing" title="Tsukiji and Toyosu and Where Your Fish Comes From">

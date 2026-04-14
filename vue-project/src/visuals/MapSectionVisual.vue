@@ -157,7 +157,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.6);
+  /* border: 1px solid rgba(148, 163, 184, 0.6); */
 }
 
 .token-warning {
