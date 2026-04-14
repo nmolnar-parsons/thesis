@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useScrollSteps } from '../../composables/useScrollSteps'
 
 defineProps({
@@ -15,6 +15,11 @@ const { activeStep, progress, setup } = useScrollSteps({
   onProgress: (value) => emit('step-progress', value),
 })
 
+const graphicSlotProps = computed(() => ({
+  activeStep: activeStep.value,
+  stepProgress: progress.value,
+}))
+
 onMounted(() => {
   setup(sectionRef.value, '.scroll-step')
 })
@@ -23,7 +28,7 @@ onMounted(() => {
 <template>
   <section ref="sectionRef" class="pinned-scroll-section">
     <div class="sticky-graphic">
-      <slot name="graphic" :active-step="activeStep" :step-progress="progress" />
+      <slot name="graphic" v-bind="graphicSlotProps" />
     </div>
     <div class="step-column">
       <article

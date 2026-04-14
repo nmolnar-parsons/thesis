@@ -25,6 +25,8 @@ jobs:
       run: cd ${{ env.VUEDIR }} && npm install
 
     - name: Build Site
+      env:
+        VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
       run: cd ${{ env.VUEDIR }} && npm run build
 
     - name: Deploy
