@@ -7,7 +7,7 @@ import TunaStackedBarsVisual from '../visuals/TunaStackedBarsVisual.vue'
 const steps = [
   {
     id: 'hf1',
-    title: 'Pacific bluefin',
+    title: 'Pacific bluefin tuna catch',
     text: 'Global tuna catch (tonnes) for Pacific bluefin (PBF) alone from 1965 onward. Bar height is raw catch each year.',
   },
   {
