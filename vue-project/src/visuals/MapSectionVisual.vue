@@ -66,7 +66,7 @@ function updateCameraForStep(stepIndex) {
   const lastIndex = props.stepCount - 1
   if (lastIndex < 0) return
   if (stepIndex === lastIndex) {
-    map.flyTo({ center: [-35, 48], zoom: 3, speed: 0.75, essential: true })
+    map.flyTo({ center: [-20, 45], zoom: 3, speed: 0.75, essential: true })
   } else {
     map.jumpTo({ center: [0, 0], zoom: 1.25, essential: true })
   }

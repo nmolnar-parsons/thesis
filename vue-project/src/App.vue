@@ -5,6 +5,7 @@ import SectionBreakdown from './sections/SectionBreakdown.vue'
 import SectionShippingPricing from './sections/SectionShippingPricing.vue'
 import SectionHistoricalFishing from './sections/SectionHistoricalFishing.vue'
 import SectionTitle from './sections/SectionTitle.vue'
+import SectionImports from './sections/SectionImports.vue'
 import SectionFutures from './sections/SectionFutures.vue'
 </script>
 
@@ -16,6 +17,7 @@ import SectionFutures from './sections/SectionFutures.vue'
     <SectionShippingPricing />
     <SectionHistoricalFishing />
     <SectionMap />
+    <SectionImports />
     <SectionFutures />
   </main>
 </template>
