@@ -12,13 +12,13 @@ const steps = [
   },
   {
     id: 'hf2',
-    title: 'Bluefin species',
-    text: 'Atlantic (BFT) and southern (SBF) bluefin join the stack. The y-axis rescales to the largest yearly total in this view.',
+    title: 'more bluefin...',
+    text: 'other species of bluefin are caught at similar scales.',
   },
   {
     id: 'hf3',
-    title: 'Tropical tunas',
-    text: 'Yellowfin (YFT) and bigeye (BET) complete the five-species stack. The legend grows as each group appears.',
+    title: 'more tuna used (prettu specifically) for tuna',
+    text: "Catches of bluefin tuna are dwarfed by cheaper but more prevalent species like Yellowfin and Bigeye. These are not nice enough cuts to cost the same as bluefin, but they're still mainly used for sushi.",
   },
 ]
 </script>
