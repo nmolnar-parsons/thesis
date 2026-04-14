@@ -2,14 +2,14 @@
 import { onMounted, ref } from 'vue'
 import { useScrollSteps } from '../../composables/useScrollSteps'
 
-const props = defineProps({
+defineProps({
   steps: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['step-enter', 'step-exit', 'step-progress'])
 const sectionRef = ref(null)
 
-const { activeStep, setup } = useScrollSteps({
+const { activeStep, progress, setup } = useScrollSteps({
   onEnter: (payload) => emit('step-enter', payload),
   onExit: (payload) => emit('step-exit', payload),
   onProgress: (value) => emit('step-progress', value),
@@ -23,7 +23,7 @@ onMounted(() => {
 <template>
   <section ref="sectionRef" class="pinned-scroll-section">
     <div class="sticky-graphic">
-      <slot name="graphic" :active-step="activeStep" />
+      <slot name="graphic" :active-step="activeStep" :step-progress="progress" />
     </div>
     <div class="step-column">
       <article

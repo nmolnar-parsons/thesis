@@ -1,124 +1,177 @@
 <script setup>
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import tunaCatchDataUrl from '../data/cwp-grid-5deg-catch.geojson?url'
+
+const YEAR_START = 1965
+const YEAR_END = 2023
+const DEFAULT_PROJECTION = 'winkelTripel'
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
+  /** Scrollama progress through the current step, roughly 0–1. */
+  stepProgress: { type: Number, default: 0 },
+  stepCount: { type: Number, default: 4 },
 })
 
 const mapRef = ref(null)
-let map
+const mapReady = ref(false)
+const tokenMissing = ref(false)
+let map = null
 
-const polygonData = {
-  type: 'FeatureCollection',
-  features: [
-    {
-      type: 'Feature',
-      properties: { name: 'North Pacific' },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[[-165, 16], [-110, 16], [-110, 48], [-165, 48], [-165, 16]]],
-      },
-    },
-    {
-      type: 'Feature',
-      properties: { name: 'Mediterranean' },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[[0, 30], [36, 30], [36, 44], [0, 44], [0, 30]]],
-      },
-    },
-  ],
+/** Years animate across all scroll steps except the last (e.g. North Atlantic). */
+const yearTimelineT = computed(() => {
+  const spanSteps = Math.max(1, props.stepCount - 1)
+  const lastTimedIndex = props.stepCount - 2
+  if (lastTimedIndex < 0) return 1
+  if (props.activeStep > lastTimedIndex) return 1
+  const pos = Math.min(props.activeStep + props.stepProgress, spanSteps)
+  return pos / spanSteps
+})
+
+const currentYear = computed(() => {
+  const span = YEAR_END - YEAR_START
+  const y = YEAR_START + yearTimelineT.value * span
+  return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(y)))
+})
+
+const propertyName = computed(() => `tonne_${currentYear.value}`)
+const tunaColorExpression = computed(() => [
+  'interpolate',
+  ['linear'],
+  ['coalesce', ['get', propertyName.value], 0],
+  0, '#fff5f0',
+  100, '#fee0d2',
+  500, '#fcbba1',
+  1000, '#fc9272',
+  5000, '#fb6a4a',
+  10000, '#de2d26',
+  50000, '#a50f15',
+  100000, '#67000d',
+])
+
+function setProjection() {
+  if (!map || !mapReady.value) return
+  map.setProjection(DEFAULT_PROJECTION)
 }
 
-const pointData = {
-  type: 'FeatureCollection',
-  features: [
-    { type: 'Feature', properties: { value: 28 }, geometry: { type: 'Point', coordinates: [-122.4, 37.8] } },
-    { type: 'Feature', properties: { value: 31 }, geometry: { type: 'Point', coordinates: [139.7, 35.6] } },
-    { type: 'Feature', properties: { value: 24 }, geometry: { type: 'Point', coordinates: [2.35, 48.86] } },
-    { type: 'Feature', properties: { value: 19 }, geometry: { type: 'Point', coordinates: [121.5, 25.03] } },
-  ],
+function updateCatchLayer() {
+  if (!map || !mapReady.value || !map.getLayer('tuna-catch-fill')) return
+  map.setPaintProperty('tuna-catch-fill', 'fill-color', tunaColorExpression.value)
 }
 
-function updateMapState(step) {
+function updateCameraForStep(stepIndex) {
   if (!map) return
-  const opacity = step > 1 ? 0.6 : 0.35
-  if (map.getLayer('zones-fill')) {
-    map.setPaintProperty('zones-fill', 'fill-opacity', opacity)
+  const lastIndex = props.stepCount - 1
+  if (lastIndex < 0) return
+  if (stepIndex === lastIndex) {
+    map.flyTo({ center: [-35, 48], zoom: 3, speed: 0.75, essential: true })
+  } else {
+    map.jumpTo({ center: [0, 0], zoom: 1.25, essential: true })
   }
-
-  const centerByStep = [
-    [-145, 32],
-    [18, 39],
-    [130, 32],
-  ]
-  const zoomByStep = [2.1, 3.2, 3.4]
-  const safeIndex = Math.min(step, 2)
-  map.flyTo({ center: centerByStep[safeIndex], zoom: zoomByStep[safeIndex], speed: 0.5, essential: true })
 }
 
 onMounted(() => {
   if (!mapRef.value) return
 
-  mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || ''
+  const mapboxToken = (
+    import.meta.env.VITE_MAPBOX_TOKEN ||
+    import.meta.env.MAPBOX_TOKEN ||
+    ''
+  ).trim()
+  if (!mapboxToken) {
+    tokenMissing.value = true
+    console.warn('MapSectionVisual: missing VITE_MAPBOX_TOKEN or MAPBOX_TOKEN; map initialization skipped.')
+    return
+  }
+
+  mapboxgl.accessToken = mapboxToken
   map = new mapboxgl.Map({
     container: mapRef.value,
     style: 'mapbox://styles/mapbox/light-v11',
-    center: [-130, 33],
-    zoom: 2.1,
+    center: [0, 0],
+    zoom: 1.5,
+    projection: DEFAULT_PROJECTION,
+    renderWorldCopies: true,
   })
 
   map.on('load', () => {
-    map.addSource('zones', { type: 'geojson', data: polygonData })
-    map.addSource('markets', { type: 'geojson', data: pointData })
+    map.addSource('tuna-catch', {
+      type: 'geojson',
+      data: tunaCatchDataUrl,
+    })
 
     map.addLayer({
-      id: 'zones-fill',
+      id: 'tuna-catch-fill',
       type: 'fill',
-      source: 'zones',
+      source: 'tuna-catch',
       paint: {
-        'fill-color': '#2563eb',
-        'fill-opacity': 0.35,
+        'fill-color': tunaColorExpression.value,
+        'fill-opacity': 0.7,
       },
     })
 
-    map.addLayer({
-      id: 'market-points',
-      type: 'circle',
-      source: 'markets',
-      paint: {
-        'circle-radius': ['interpolate', ['linear'], ['get', 'value'], 10, 6, 35, 14],
-        'circle-color': '#f97316',
-        'circle-opacity': 0.9,
-      },
-    })
-
-    updateMapState(props.activeStep)
+    mapReady.value = true
+    setProjection()
+    updateCatchLayer()
+    updateCameraForStep(props.activeStep)
   })
 })
 
 watch(
   () => props.activeStep,
-  (step) => updateMapState(step),
+  (step) => {
+    updateCameraForStep(step)
+  },
 )
+
+watch(currentYear, () => {
+  updateCatchLayer()
+})
 
 onUnmounted(() => {
   if (map) map.remove()
+  map = null
 })
 </script>
 
 <template>
-  <div ref="mapRef" class="map-host" />
+  <div class="map-frame">
+    <div ref="mapRef" class="map-host" />
+
+    <p v-if="tokenMissing" class="token-warning">
+      Add `VITE_MAPBOX_TOKEN` in your local `.env` to render the map.
+    </p>
+  </div>
 </template>
 
 <style scoped>
+.map-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .map-host {
   width: 100%;
-  height: min(76vh, 620px);
-  border-radius: 0.85rem;
+  height: 100%;
   overflow: hidden;
-  border: 1px solid #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+.token-warning {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 6;
+  max-width: min(420px, calc(100% - 2rem));
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(254, 242, 242, 0.92);
+  color: #991b1b;
+  font-size: 0.8rem;
 }
 </style>
