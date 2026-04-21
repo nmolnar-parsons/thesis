@@ -22,16 +22,45 @@ const SPECIES_META = [
 ]
 
 const SPECIES_COLORS = {
-  PBF: '#0ea5e9',
-  BFT: '#6366f1',
-  SBF: '#14b8a6',
-  YFT: '#f59e0b',
-  BET: '#db2777',
+  PBF: '#5A7390',
+  BFT: '#17203D',
+  SBF: '#B3BFD1',
+  YFT: '#E5D76A',
+  BET: '#E3F1F5',
 }
 
-const STAGES = [['PBF'], ['PBF', 'BFT', 'SBF'], ['PBF', 'BFT', 'SBF', 'YFT', 'BET']]
+const STAGES = [
+  {
+    species: ['BFT'],
+    yearRange: [1965, 2007],
+  },
+  {
+    species: ['BFT'],
+    yearRange: [1965, 2014],
+  },
+  {
+    species: ['BFT'],
+  },
+  {
+    species: ['BFT', 'PBF', 'SBF'],
+  },
+  {
+    species: ['PBF', 'BFT', 'SBF', 'YFT', 'BET'],
+    annotations: [
+      {
+        type: 'bracket',
+        orientation: 'vertical',
+        year: 2023,
+        y1: 0,
+        y2: 70000,
+        label: 'the entire bluefin catch!',
+      },
+    ],
+  },
+]
 
-const stageSpecies = computed(() => STAGES[Math.min(Math.max(props.activeStep, 0), STAGES.length - 1)])
+const stageConfig = computed(() => STAGES[Math.min(Math.max(props.activeStep, 0), STAGES.length - 1)])
+const stageSpecies = computed(() => stageConfig.value.species)
 
 const legendSpecies = computed(() =>
   SPECIES_META.filter((s) => stageSpecies.value.includes(s.code)),
@@ -105,6 +134,12 @@ function maxStackForOrder(years, speciesOrder, bySy) {
   return m
 }
 
+function yearsWithinRange(years, yearRange) {
+  if (!yearRange || yearRange.length !== 2) return years
+  const [start, end] = yearRange
+  return years.filter((y) => y >= start && y <= end)
+}
+
 function yDomainMax(rawMax) {
   if (rawMax <= 0) return 1
   return rawMax * 1.08
@@ -112,6 +147,54 @@ function yDomainMax(rawMax) {
 
 function xTickYearsDecadal(years) {
   return years.filter((y) => (y - YEAR_START) % 10 === 0)
+}
+
+function yearCenterX(xScale, year) {
+  const x = xScale(String(year))
+  if (x == null) return null
+  return x + xScale.bandwidth() / 2
+}
+
+function drawBracketPath(annotation, xScale, yScale) {
+  const cap = 8
+  if (annotation.orientation === 'vertical') {
+    const x = yearCenterX(xScale, annotation.year)
+    if (x == null) return null
+    const y1 = yScale(annotation.y1)
+    const y2 = yScale(annotation.y2)
+    return `M ${x} ${y1} H ${x - cap} M ${x} ${y1} V ${y2} M ${x} ${y2} H ${x - cap}`
+  }
+
+  const y = yScale(annotation.y)
+  const x1 = yearCenterX(xScale, annotation.x1Year)
+  const x2 = yearCenterX(xScale, annotation.x2Year)
+  if (x1 == null || x2 == null) return null
+  return `M ${x1} ${y} V ${y - cap} M ${x1} ${y} H ${x2} M ${x2} ${y} V ${y - cap}`
+}
+
+function annotationLabelPosition(annotation, xScale, yScale) {
+  if (annotation.type === 'line') {
+    const x2 = yearCenterX(xScale, annotation.x2Year)
+    if (x2 == null) return null
+    return {
+      x: x2 + 6 + (annotation.labelDx || 0),
+      y: yScale(annotation.y2) - 4 + (annotation.labelDy || 0),
+    }
+  }
+  if (annotation.orientation === 'vertical') {
+    const x = yearCenterX(xScale, annotation.year)
+    if (x == null) return null
+    return {
+      x: x + 10 + (annotation.labelDx || 0),
+      y: (yScale(annotation.y1) + yScale(annotation.y2)) / 2 + (annotation.labelDy || 0),
+    }
+  }
+  const x2 = yearCenterX(xScale, annotation.x2Year)
+  if (x2 == null) return null
+  return {
+    x: x2 - 4 + (annotation.labelDx || 0),
+    y: yScale(annotation.y) - 12 + (annotation.labelDy || 0),
+  }
 }
 
 let svg
@@ -130,15 +213,17 @@ function drawChart() {
   svg.attr('width', width).attr('height', height)
 
   const { years, bySy } = matrixRef
-  const order = stageSpecies.value
+  const stage = stageConfig.value
+  const order = stage.species
+  const stageYears = yearsWithinRange(years, stage.yearRange)
 
-  const stackMax = maxStackForOrder(years, order, bySy)
+  const stackMax = maxStackForOrder(stageYears, order, bySy)
   const yMax = yDomainMax(stackMax)
 
   const xScale = scaleBand().domain(years.map(String)).range([0, innerW]).padding(0.15)
   const yScale = scaleLinear().domain([0, yMax]).range([innerH, 0])
 
-  const segs = segmentGeometry(years, order, bySy)
+  const segs = segmentGeometry(stageYears, order, bySy)
 
   const stepChanged = prevActiveStep.value !== null && prevActiveStep.value !== props.activeStep
   prevActiveStep.value = props.activeStep
@@ -152,6 +237,7 @@ function drawChart() {
     gMain.append('g').attr('class', 'y-axis')
     gMain.append('text').attr('class', 'y-axis-label')
     gMain.append('g').attr('class', 'bars')
+    gMain.append('g').attr('class', 'annotations')
   }
   gMain.attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -180,6 +266,7 @@ function drawChart() {
     .text('global tuna catch (tonnes)')
 
   const gBars = gMain.select('g.bars')
+  const gAnnotations = gMain.select('g.annotations')
   gBars.selectAll('rect').interrupt()
 
   const segKey = (d) => `${d.year}-${d.species}`
@@ -193,7 +280,7 @@ function drawChart() {
           .append('rect')
           .attr('x', (d) => xScale(String(d.year)))
           .attr('width', xScale.bandwidth())
-          .attr('y', (d) => yScale(d.y0))
+          .attr('y', 0)
           .attr('height', 0)
           .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
           .attr('opacity', 0),
@@ -218,6 +305,52 @@ function drawChart() {
     .attr('height', (d) => Math.max(0, yScale(d.y0) - yScale(d.y1)))
     .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
     .attr('opacity', 0.92)
+
+  const annotations = stage.annotations || []
+  const lineAnn = annotations.filter((a) => a.type === 'line')
+  const bracketAnn = annotations.filter((a) => a.type === 'bracket')
+
+  gAnnotations
+    .selectAll('line.annotation-line')
+    .data(lineAnn, (_, i) => `line-${i}`)
+    .join('line')
+    .attr('class', 'annotation-line')
+    .transition(t)
+    .attr('x1', (d) => yearCenterX(xScale, d.x1Year))
+    .attr('x2', (d) => yearCenterX(xScale, d.x2Year))
+    .attr('y1', (d) => yScale(d.y1))
+    .attr('y2', (d) => yScale(d.y2))
+    .attr('stroke', '#dc2626')
+    .attr('stroke-width', 2)
+    .attr('stroke-linecap', 'round')
+    .attr('opacity', 0.9)
+
+  gAnnotations
+    .selectAll('path.annotation-bracket')
+    .data(bracketAnn, (_, i) => `bracket-${i}`)
+    .join('path')
+    .attr('class', 'annotation-bracket')
+    .transition(t)
+    .attr('d', (d) => drawBracketPath(d, xScale, yScale))
+    .attr('fill', 'none')
+    .attr('stroke', '#dc2626')
+    .attr('stroke-width', 2)
+    .attr('stroke-linecap', 'round')
+    .attr('opacity', 0.9)
+
+  gAnnotations
+    .selectAll('text.annotation-label')
+    .data(annotations.filter((a) => a.label), (_, i) => `label-${i}`)
+    .join('text')
+    .attr('class', 'annotation-label')
+    .transition(t)
+    .attr('x', (d) => annotationLabelPosition(d, xScale, yScale)?.x)
+    .attr('y', (d) => annotationLabelPosition(d, xScale, yScale)?.y)
+    .attr('font-size', 10)
+    .attr('fill', '#b91c1c')
+    .attr('font-weight', 600)
+    .attr('opacity', 0.95)
+    .text((d) => d.label)
 }
 
 let ro
@@ -267,9 +400,9 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   min-height: min(70vh, 560px);
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.75rem;
+  /* background: #fff; */
+  /* border: 1px solid #cbd5e1; */
+  /* border-radius: 0.75rem; */
   overflow: hidden;
 }
 

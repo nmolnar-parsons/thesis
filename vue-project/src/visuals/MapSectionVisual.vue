@@ -2,11 +2,13 @@
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import tunaCatchDataUrl from '../data/cwp-grid-5deg-catch.geojson?url'
+import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch.geojson?url'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
 const DEFAULT_PROJECTION = 'winkelTripel'
+let OCEAN_COLOR = '#1b4974';
+
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
@@ -36,12 +38,12 @@ const currentYear = computed(() => {
   return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(y)))
 })
 
-const propertyName = computed(() => `tonne_${currentYear.value}`)
+const propertyName = computed(() => `count_${currentYear.value}`)
 const tunaColorExpression = computed(() => [
   'interpolate',
   ['linear'],
   ['coalesce', ['get', propertyName.value], 0],
-  0, '#fff5f0',
+  0, OCEAN_COLOR,
   100, '#fee0d2',
   500, '#fcbba1',
   1000, '#fc9272',
@@ -50,6 +52,16 @@ const tunaColorExpression = computed(() => [
   50000, '#a50f15',
   100000, '#67000d',
 ])
+
+function hideMapLabels() {
+  if (!map || !mapReady.value) return
+  const layers = map.getStyle()?.layers || []
+  for (const layer of layers) {
+    if (layer.type === 'symbol') {
+      map.setLayoutProperty(layer.id, 'visibility', 'none')
+    }
+  }
+}
 
 function setProjection() {
   if (!map || !mapReady.value) return
@@ -112,7 +124,23 @@ onMounted(() => {
       },
     })
 
+    // White continents overlay layer above tuna data.
+    map.addLayer({
+      'id': 'continent-fill',
+      'type': 'fill',
+      'source': {
+          'type': 'vector',
+          'url': 'mapbox://mapbox.country-boundaries-v1'
+      },
+      'source-layer': 'country_boundaries',
+      'paint': {
+          'fill-color': '#ffffff',
+          'fill-opacity': 1
+      }
+    })
+
     mapReady.value = true
+    hideMapLabels()
     setProjection()
     updateCatchLayer()
     updateCameraForStep(props.activeStep)

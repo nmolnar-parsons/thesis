@@ -15,8 +15,8 @@ import SectionFutures from './sections/SectionFutures.vue'
     <SectionIntro />
     <SectionBreakdown />
     <SectionShippingPricing />
-    <SectionHistoricalFishing />
     <SectionMap />
+    <SectionHistoricalFishing />
     <SectionImports />
     <SectionFutures />
   </main>
