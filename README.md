@@ -8,3 +8,6 @@ Sushi is threatened by its own popularity. The ravenous appetite for this cuisin
 
 ## Hero Image
 
+![Hero Image, subject to change](https://raw.githubusercontent.com/nmolnar-parsons/thesis/4c26df594bdbf57cee186eb0fbf99c45dbde6b4b/preview.png)
+
+By Nichos Molnar
