@@ -23,18 +23,20 @@ defineProps({
 
 .eyebrow {
   margin: 0;
-  color: #475569;
-  font-size: 0.8rem;
+  color: var(--color-copy-eyebrow);
+  font-size: var(--font-size-copy-eyebrow);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 h2 {
   margin: 0.4rem 0 0.65rem;
-  font-size: 1.4rem;
+  font-size: var(--font-size-copy-title);
+  color: var(--color-copy-title);
 }
 
 :deep(p) {
   margin: 0.5rem 0;
+  color: var(--color-copy-body);
 }
 </style>

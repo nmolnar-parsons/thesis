@@ -3,7 +3,7 @@ import StorySection from '../components/story/StorySection.vue'
 </script>
 
 <template>
-  <StorySection id="title" height="screen" width="full" background="#e2e8f0">
+  <StorySection id="title" height="screen" width="full">
     <div class="title-wrap">
       <h1>The Last Sushi in the World</h1>
     </div>

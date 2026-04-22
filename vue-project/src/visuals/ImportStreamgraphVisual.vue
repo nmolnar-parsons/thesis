@@ -184,10 +184,10 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   min-height: min(46.67vh, 373px);
-  border-radius: 0.75rem;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
+  /* border-radius: 0.75rem; */
+  /* border: 1px solid #cbd5e1; */
+  /* background: #ffffff; */
+  /* box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06); */
   overflow: hidden;
 }
 

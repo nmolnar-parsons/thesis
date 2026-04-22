@@ -26,7 +26,7 @@ const sushiImages = [
 </script>
 
 <template>
-  <StorySection id="intro" height="min-screen" width="full" background="#e2e8f0">
+  <StorySection id="intro" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="center">
       <div class="story-copy story-copy--top">
         <CopyBlock title="Sushi is everywhere.">

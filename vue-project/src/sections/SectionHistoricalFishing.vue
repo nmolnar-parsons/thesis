@@ -7,7 +7,7 @@ import TunaStackedBarsVisual from '../visuals/TunaStackedBarsVisual.vue'
 const steps = [
   {
     id: 'hf1',
-    title: 'The case of Atlantic Bluefin',
+    title: '...and the fishing world bent to its will.',
     text: "As sushi's popularity grew, so did the demand for bluefin tuna. In the 1980s, it became possible and profitable to ship Atlantic bluefin tuna to Japan. By 2007, over 60,000 tonnes of Atlantic bluefin tuna were caught yearly.",
   },
   {
@@ -34,7 +34,7 @@ const steps = [
 </script>
 
 <template>
-  <StorySection id="historical-fishing" height="overscroll" width="full" background="#e2e8f0">
+  <StorySection id="historical-fishing" height="overscroll" width="full">
     <PinnedScrollSection :steps="steps">
       <template #graphic="graphicProps">
         <TunaStackedBarsVisual :active-step="graphicProps.activeStep" />
@@ -50,7 +50,7 @@ const steps = [
 
 <style scoped>
 #historical-fishing :deep(.sticky-graphic) {
-  background: #e2e8f0;
+  background: var(--color-section-surface);
 }
 
 #historical-fishing :deep(.scroll-step) {
@@ -64,10 +64,10 @@ const steps = [
 #historical-fishing :deep(.step-card) {
   max-width: min(22rem, 33vw);
   width: 100%;
-  padding: 1rem 1.15rem;
-  border-radius: 0.75rem;
-  background: rgba(248, 250, 252, 0.94);
-  border: 1px solid rgba(148, 163, 184, 0.45);
+  padding: var(--step-card-padding-y) 1.15rem;
+  border-radius: var(--step-card-radius);
+  background: var(--color-step-card-bg);
+  border: 1px solid var(--color-step-card-border);
   box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
 }
 </style>

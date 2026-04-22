@@ -1,10 +1,46 @@
+/* --------------------------------------------------------------------------
+   Design tokens — edit here for global typography, surfaces, and spacing
+   -------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.45;
-  font-weight: 400;
-  color: #1f2937;
-  background: #f8fafc;
+
+  /* Typography */
+  --font-sans: Inter, Avenir, Helvetica, Arial, sans-serif;
+  --line-height-body: 1.45;
+  --font-weight-body: 400;
+  --font-size-copy-eyebrow: 0.8rem;
+  --font-size-copy-title: 1.4rem;
+
+  /* Colors */
+  --color-text: #1f2937;
+  --color-page-bg: #fcfcf8;
+  --color-section-surface: #e2e8f0;
+  --color-link: #2563eb;
+  --color-sticky-graphic-bg: #0f172a;
+  --color-step-card-bg: rgba(248, 250, 252, 0.9);
+  --color-step-card-border: rgba(148, 163, 184, 0.6);
+  --color-copy-eyebrow: #475569;
+  --color-copy-title: #1f2937;
+  --color-copy-body: #1f2937;
+
+  /* Section shell (StorySection) */
+  --story-section-padding-y: 4rem;
+  --story-section-padding-x: 1rem;
+
+  /* Pinned scroll steps */
+  --scroll-step-padding: 1rem;
+  --step-card-padding-y: 1rem;
+  --step-card-padding-x: 1.2rem;
+  --step-card-radius: 0.75rem;
+  --step-card-max-width: min(560px, calc(100% - 2rem));
+}
+
+:root {
+  font-family: var(--font-sans);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-body);
+  color: var(--color-text);
+  background: var(--color-page-bg);
 }
 
 *,
@@ -16,11 +52,11 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f8fafc;
+  background: var(--color-page-bg);
 }
 
 a {
-  color: #2563eb;
+  color: var(--color-link);
 }
 
 #app {
@@ -30,6 +66,24 @@ a {
 .story-page {
   width: min(1400px, 100%);
   margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Visibility toggles — add class on <html> (DevTools or JS).
+   Do not use display:none on .scroll-step (breaks Scrollama step geometry).
+   !important beats scoped .active .step-card { opacity: 1 } in components.
+   -------------------------------------------------------------------------- */
+html.story-hide-copy .copy-block {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html.story-hide-step-ui .scroll-step .copy-block,
+html.story-hide-step-ui .scroll-step .step-card {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* Default layout for basic copy inside a 12-column SectionGrid. Override in section scoped styles when needed. */

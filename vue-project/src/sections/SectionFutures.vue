@@ -5,7 +5,7 @@ import StorySection from '../components/story/StorySection.vue'
 </script>
 
 <template>
-  <StorySection id="futures" height="min-screen" width="full" background="#e2e8f0">
+  <StorySection id="futures" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="center">
       <div class="story-copy">
         <CopyBlock eyebrow="Section 05" title="Futures">

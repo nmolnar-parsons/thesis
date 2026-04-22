@@ -13,8 +13,8 @@ const steps = [
 </script>
 
 <template>
-  <StorySection id="map" height="overscroll" width="full" background="#e2e8f0">
-    <PinnedScrollSection :steps="steps">
+  <StorySection id="map" height="overscroll" width="full">
+    <PinnedScrollSection :steps="steps" :scroll-offset="0">
       <template #graphic="graphicProps">
         <MapSectionVisual
           :active-step="graphicProps.activeStep"
@@ -30,3 +30,12 @@ const steps = [
     </PinnedScrollSection>
   </StorySection>
 </template>
+
+<style scoped>
+#map :deep(.step-column) {
+  /* Delay first step activation until map has fully pinned. */
+  padding-top: 90vh;
+  /* Keep map pinned until the final step reaches the top. */
+  padding-bottom: 90vh;
+}
+</style>

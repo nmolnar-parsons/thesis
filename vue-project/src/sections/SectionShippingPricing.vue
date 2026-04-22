@@ -6,7 +6,7 @@ import atlanticBluefin from '../visuals/tuna-images/atlantic-bluefin.png'
 </script>
 
 <template>
-  <StorySection id="shipping-pricing" height="min-screen" width="wide" background="#e2e8f0">
+  <StorySection id="shipping-pricing" height="min-screen" width="wide">
     <SectionGrid :columns="12" gap="1rem">
       <div class="copy-col">
         <CopyBlock title="Tsukiji and Toyosu and Where Your Fish Comes From">

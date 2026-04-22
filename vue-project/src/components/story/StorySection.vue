@@ -5,7 +5,7 @@ const props = defineProps({
   id: { type: String, default: '' },
   height: { type: String, default: 'min-screen' },
   width: { type: String, default: 'wide' },
-  background: { type: String, default: 'transparent' },
+  background: { type: String, default: 'var(--color-section-surface)' },
   visualPlacement: { type: String, default: 'fullbleed' },
 })
 
@@ -26,7 +26,7 @@ const sectionClasses = computed(() => [
 <style scoped>
 .story-section {
   position: relative;
-  padding: 4rem 1rem;
+  padding: var(--story-section-padding-y) var(--story-section-padding-x);
   background: var(--section-bg);
 }
 

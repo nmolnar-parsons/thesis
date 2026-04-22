@@ -2,7 +2,9 @@
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch.geojson?url'
+// import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch.geojson?url'
+import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
+
 
 const YEAR_START = 1965
 const YEAR_END = 2023
@@ -20,6 +22,7 @@ const props = defineProps({
 const mapRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
+const selectedMetric = ref('tonne') //count or tonne
 let map = null
 
 /** Years animate across all scroll steps except the last (e.g. North Atlantic). */
@@ -38,19 +41,19 @@ const currentYear = computed(() => {
   return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(y)))
 })
 
-const propertyName = computed(() => `count_${currentYear.value}`)
+const propertyName = computed(() => `${selectedMetric.value}_${currentYear.value}`)
 const tunaColorExpression = computed(() => [
   'interpolate',
   ['linear'],
   ['coalesce', ['get', propertyName.value], 0],
   0, OCEAN_COLOR,
-  100, '#fee0d2',
-  500, '#fcbba1',
-  1000, '#fc9272',
-  5000, '#fb6a4a',
-  10000, '#de2d26',
-  50000, '#a50f15',
-  100000, '#67000d',
+  100,  '#FFD700',
+  500,  '#FF8C00',
+  1000, '#FF6347',
+  5000, '#DC143C',
+  10000,'#8B0000',
+  50000,'#660000',
+  100000,'#330000'
 ])
 
 function hideMapLabels() {
@@ -167,6 +170,7 @@ onUnmounted(() => {
 <template>
   <div class="map-frame">
     <div ref="mapRef" class="map-host" />
+    <p class="year-label">{{ currentYear }}</p>
 
     <p v-if="tokenMissing" class="token-warning">
       Add `VITE_MAPBOX_TOKEN` in your local `.env` to render the map.
@@ -186,6 +190,22 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
   /* border: 1px solid rgba(148, 163, 184, 0.6); */
+}
+
+.year-label {
+  position: absolute;
+  top: .25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.4rem;
+  /* background: rgba(255, 255, 255, 0.88); */
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .token-warning {

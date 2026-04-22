@@ -2,14 +2,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { useScrollSteps } from '../../composables/useScrollSteps'
 
-defineProps({
-  steps: { type: Array, default: () => [] },
-})
-
 const emit = defineEmits(['step-enter', 'step-exit', 'step-progress'])
 const sectionRef = ref(null)
 
+const props = defineProps({
+  steps: { type: Array, default: () => [] },
+  scrollOffset: { type: Number, default: 0.55 },
+})
+
 const { activeStep, progress, setup } = useScrollSteps({
+  offset: props.scrollOffset,
   onEnter: (payload) => emit('step-enter', payload),
   onExit: (payload) => emit('step-exit', payload),
   onProgress: (value) => emit('step-progress', value),
@@ -59,7 +61,7 @@ onMounted(() => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #0f172a;
+  background: var(--color-sticky-graphic-bg);
 }
 
 .step-column {
@@ -71,18 +73,18 @@ onMounted(() => {
 
 .scroll-step {
   min-height: 100vh;
-  padding: 1rem;
+  padding: var(--scroll-step-padding);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .step-card {
-  width: min(560px, calc(100% - 2rem));
-  padding: 1rem 1.2rem;
-  border-radius: 0.75rem;
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.6);
+  width: var(--step-card-max-width);
+  padding: var(--step-card-padding-y) var(--step-card-padding-x);
+  border-radius: var(--step-card-radius);
+  background: var(--color-step-card-bg);
+  border: 1px solid var(--color-step-card-border);
   opacity: 0.45;
   transition: opacity 220ms ease;
 }

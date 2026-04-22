@@ -7,7 +7,7 @@ import CopyBlock from '../components/layout/CopyBlock.vue'
 </script>
 
 <template>
-  <StorySection id="breakdown" height="min-screen" width="full" background="#e2e8f0">
+  <StorySection id="breakdown" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="center">
       <div class="story-copy">
         <CopyBlock title="Limited Resources">

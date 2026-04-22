@@ -6,7 +6,7 @@ import ImportStreamgraphVisual from '../visuals/ImportStreamgraphVisual.vue'
 </script>
 
 <template>
-  <StorySection id="imports" height="min-screen" width="full" background="#e2e8f0">
+  <StorySection id="imports" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="start">
       <div class="story-copy story-copy--top imports-copy">
         <CopyBlock eyebrow="Section 05" title="Imports">
@@ -29,7 +29,7 @@ import ImportStreamgraphVisual from '../visuals/ImportStreamgraphVisual.vue'
 }
 
 .imports-visual {
-  grid-column: 2 / span 10;
+  grid-column: 1 / span 12;
 }
 
 @media (max-width: 980px) {
