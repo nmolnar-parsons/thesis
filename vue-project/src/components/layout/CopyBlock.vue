@@ -25,6 +25,7 @@ defineProps({
   margin: 0;
   color: var(--color-copy-eyebrow);
   font-size: var(--font-size-copy-eyebrow);
+  font-family: var(--font-copy-display);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -33,10 +34,13 @@ h2 {
   margin: 0.4rem 0 0.65rem;
   font-size: var(--font-size-copy-title);
   color: var(--color-copy-title);
+  font-family: var(--font-copy-display);
+  font-weight: 400;
 }
 
 :deep(p) {
   margin: 0.5rem 0;
   color: var(--color-copy-body);
+  font-family: var(--font-copy-display);
 }
 </style>

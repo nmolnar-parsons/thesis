@@ -95,6 +95,12 @@ onMounted(() => {
 
 .step-card h3 {
   margin: 0;
+  font-family: var(--font-copy-display);
+  font-weight: 400;
+}
+
+.step-card p {
+  font-family: var(--font-copy-display);
 }
 
 @media (max-width: 900px) {

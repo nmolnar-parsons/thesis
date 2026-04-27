@@ -9,8 +9,9 @@ import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geoj
 const YEAR_START = 1965
 const YEAR_END = 2023
 const DEFAULT_PROJECTION = 'winkelTripel'
-let OCEAN_COLOR = '#1b4974';
-
+let OCEAN_COLOR = '#1b4974'
+/** 250 kg per bluefin on average; convert head-count to metric tonnes. */
+const COUNT_TO_TONNE = 250 / 1000
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
@@ -22,7 +23,6 @@ const props = defineProps({
 const mapRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
-const selectedMetric = ref('tonne') //count or tonne
 let map = null
 
 /** Years animate across all scroll steps except the last (e.g. North Atlantic). */
@@ -41,20 +41,27 @@ const currentYear = computed(() => {
   return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(y)))
 })
 
-const propertyName = computed(() => `${selectedMetric.value}_${currentYear.value}`)
-const tunaColorExpression = computed(() => [
-  'interpolate',
-  ['linear'],
-  ['coalesce', ['get', propertyName.value], 0],
-  0, OCEAN_COLOR,
-  100,  '#FFD700',
-  500,  '#FF8C00',
-  1000, '#FF6347',
-  5000, '#DC143C',
-  10000,'#8B0000',
-  50000,'#660000',
-  100000,'#330000'
-])
+const tunaColorExpression = computed(() => {
+  const y = currentYear.value
+  const combinedTonnes = [
+    '+',
+    ['coalesce', ['get', `tonne_${y}`], 0],
+    ['*', COUNT_TO_TONNE, ['coalesce', ['get', `count_${y}`], 0]],
+  ]
+  return [
+    'interpolate',
+    ['linear'],
+    combinedTonnes,
+    0, OCEAN_COLOR,
+    100, '#FFD700',
+    500, '#FF8C00',
+    1000, '#FF6347',
+    5000, '#DC143C',
+    10000, '#8B0000',
+    50000, '#660000',
+    100000, '#330000',
+  ]
+})
 
 function hideMapLabels() {
   if (!map || !mapReady.value) return

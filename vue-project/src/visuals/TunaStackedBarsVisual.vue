@@ -31,15 +31,16 @@ const SPECIES_COLORS = {
 
 const STAGES = [
   {
-    species: ['BFT'],
+    species: ['BFT', 'PBF', 'SBF'],
+    yearRange: [1965, 1990],
+  },
+  {
+    species: ['BFT', 'PBF', 'SBF'],
     yearRange: [1965, 2007],
   },
   {
-    species: ['BFT'],
-    yearRange: [1965, 2014],
-  },
-  {
-    species: ['BFT'],
+    species: ['BFT', 'PBF', 'SBF'],
+    yearRange: [1965, 2012],
   },
   {
     species: ['BFT', 'PBF', 'SBF'],
@@ -132,6 +133,14 @@ function maxStackForOrder(years, speciesOrder, bySy) {
     m = Math.max(m, total)
   }
   return m
+}
+
+function totalForYear(year, speciesOrder, bySy) {
+  let total = 0
+  for (const sp of speciesOrder) {
+    total += bySy.get(`${sp}\0${year}`) || 0
+  }
+  return total
 }
 
 function yearsWithinRange(years, yearRange) {
@@ -236,7 +245,9 @@ function drawChart() {
     gMain.append('g').attr('class', 'x-axis')
     gMain.append('g').attr('class', 'y-axis')
     gMain.append('text').attr('class', 'y-axis-label')
+    gMain.append('g').attr('class', 'hover-guides')
     gMain.append('g').attr('class', 'bars')
+    gMain.append('g').attr('class', 'hover-targets')
     gMain.append('g').attr('class', 'annotations')
   }
   gMain.attr('transform', `translate(${margin.left},${margin.top})`)
@@ -265,11 +276,52 @@ function drawChart() {
     .attr('font-size', 11)
     .text('global tuna catch (tonnes)')
 
+  const gHoverGuides = gMain.select('g.hover-guides')
   const gBars = gMain.select('g.bars')
+  const gHoverTargets = gMain.select('g.hover-targets')
   const gAnnotations = gMain.select('g.annotations')
   gBars.selectAll('rect').interrupt()
 
   const segKey = (d) => `${d.year}-${d.species}`
+
+  const hoverLine = gHoverGuides
+    .selectAll('line.hover-line')
+    .data([null])
+    .join('line')
+    .attr('class', 'hover-line')
+    .attr('x1', 0)
+    .attr('x2', 0)
+    .attr('y1', 0)
+    .attr('y2', innerH)
+    .style('opacity', 0)
+
+  const hoverLabel = gHoverGuides
+    .selectAll('text.hover-line-label')
+    .data([null])
+    .join('text')
+    .attr('class', 'hover-line-label')
+    .attr('text-anchor', 'middle')
+    .attr('x', 0)
+    .attr('y', -5)
+    .style('opacity', 0)
+
+  function hideHoverState() {
+    gBars.selectAll('rect').classed('is-hovered', false)
+    hoverLine.style('opacity', 0)
+    hoverLabel.style('opacity', 0)
+  }
+
+  function updateHoverState(year) {
+    const x = yearCenterX(xScale, year)
+    if (x == null) return
+    const total = totalForYear(year, order, bySy)
+    gBars.selectAll('rect').classed('is-hovered', (d) => d.year === year)
+    hoverLine.attr('x1', x).attr('x2', x).attr('y2', innerH).style('opacity', 1)
+    hoverLabel
+      .attr('x', x)
+      .text(`${year}: ${total.toLocaleString(undefined, { maximumFractionDigits: 1 })} tonnes`)
+      .style('opacity', 1)
+  }
 
   gBars
     .selectAll('rect')
@@ -278,13 +330,14 @@ function drawChart() {
       (enter) =>
         enter
           .append('rect')
+          .attr('class', 'bar-segment')
           .attr('x', (d) => xScale(String(d.year)))
           .attr('width', xScale.bandwidth())
           .attr('y', 0)
           .attr('height', 0)
           .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
           .attr('opacity', 0),
-      (update) => update,
+      (update) => update.attr('class', 'bar-segment'),
       (exit) =>
         exit.each(function () {
           const elSel = select(this)
@@ -305,6 +358,35 @@ function drawChart() {
     .attr('height', (d) => Math.max(0, yScale(d.y0) - yScale(d.y1)))
     .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
     .attr('opacity', 0.92)
+
+  gHoverTargets
+    .selectAll('rect.year-hitbox')
+    .data(stageYears, (d) => d)
+    .join(
+      (enter) =>
+        enter
+          .append('rect')
+          .attr('class', 'year-hitbox')
+          .attr('x', (d) => xScale(String(d)))
+          .attr('width', xScale.bandwidth())
+          .attr('y', 0)
+          .attr('height', innerH),
+      (update) => update,
+      (exit) => exit.remove(),
+    )
+    .attr('x', (d) => xScale(String(d)))
+    .attr('width', xScale.bandwidth())
+    .attr('y', 0)
+    .attr('height', innerH)
+    .on('mouseenter', function (_event, year) {
+      updateHoverState(year)
+    })
+    .on('mousemove', function (_event, year) {
+      updateHoverState(year)
+    })
+    .on('mouseleave', () => {
+      hideHoverState()
+    })
 
   const annotations = stage.annotations || []
   const lineAnn = annotations.filter((a) => a.type === 'line')
@@ -387,7 +469,7 @@ onUnmounted(() => {
       <TransitionGroup name="legend" tag="ul" class="legend-list">
         <li v-for="s in legendSpecies" :key="s.code" class="legend-item">
           <span class="swatch" :style="{ background: SPECIES_COLORS[s.code] }" />
-          <span class="legend-label"><strong>{{ s.code }}</strong> · {{ s.label }}</span>
+          <span class="legend-label">{{ s.label }}</span>
         </li>
       </TransitionGroup>
     </aside>
@@ -414,6 +496,34 @@ onUnmounted(() => {
 
 .stacked-wrap :deep(.stacked-svg) {
   display: block;
+}
+
+.stacked-wrap :deep(.bar-segment) {
+  transition: opacity 0.2s ease;
+}
+
+.stacked-wrap :deep(.bar-segment.is-hovered) {
+  opacity: 1 !important;
+  stroke: rgba(15, 23, 42, 0.35);
+  stroke-width: 0.8;
+}
+
+.stacked-wrap :deep(.hover-line) {
+  stroke: #334155;
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.stacked-wrap :deep(.hover-line-label) {
+  fill: #0f172a;
+  font-size: 0.7rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.stacked-wrap :deep(.year-hitbox) {
+  fill: transparent;
 }
 
 .legend {

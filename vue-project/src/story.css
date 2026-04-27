@@ -1,3 +1,5 @@
+@import url('https://fonts.cdnfonts.com/css/baker-signet');
+
 /* --------------------------------------------------------------------------
    Design tokens — edit here for global typography, surfaces, and spacing
    -------------------------------------------------------------------------- */
@@ -5,7 +7,8 @@
   color-scheme: light;
 
   /* Typography */
-  --font-sans: Inter, Avenir, Helvetica, Arial, sans-serif;
+  --font-ui-sans: Inter, Avenir, Helvetica, Arial, sans-serif;
+  --font-copy-display: 'Baker Signet', Georgia, 'Times New Roman', serif;
   --line-height-body: 1.45;
   --font-weight-body: 400;
   --font-size-copy-eyebrow: 0.8rem;
@@ -36,7 +39,7 @@
 }
 
 :root {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui-sans);
   line-height: var(--line-height-body);
   font-weight: var(--font-weight-body);
   color: var(--color-text);

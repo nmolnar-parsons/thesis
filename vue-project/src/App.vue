@@ -2,10 +2,10 @@
 import SectionIntro from './sections/SectionIntro.vue'
 import SectionMap from './sections/SectionMap.vue'
 import SectionBreakdown from './sections/SectionBreakdown.vue'
-import SectionShippingPricing from './sections/SectionShippingPricing.vue'
-import SectionHistoricalFishing from './sections/SectionHistoricalFishing.vue'
+import SectionToyosuPrices from './sections/SectionToyosuPrices.vue'
+import SectionStackedBars from './sections/SectionStackedBars.vue'
 import SectionTitle from './sections/SectionTitle.vue'
-import SectionImports from './sections/SectionImports.vue'
+import SectionCountryProduction from './sections/SectionCountryProduction.vue'
 import SectionFutures from './sections/SectionFutures.vue'
 </script>
 
@@ -14,10 +14,10 @@ import SectionFutures from './sections/SectionFutures.vue'
     <SectionTitle />
     <SectionIntro />
     <SectionBreakdown />
-    <SectionShippingPricing />
+    <SectionToyosuPrices />
+    <SectionStackedBars />
     <SectionMap />
-    <SectionHistoricalFishing />
-    <SectionImports />
+    <SectionCountryProduction />
     <SectionFutures />
   </main>
 </template>

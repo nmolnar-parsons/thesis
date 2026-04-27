@@ -12,7 +12,7 @@ import CopyBlock from '../components/layout/CopyBlock.vue'
       <div class="story-copy">
         <CopyBlock title="Limited Resources">
           <p>
-            Sushi is made of two (optionally three) ingredients. Of these ingredients, fish is the limiting factor.
+            Sushi is fish.
           </p>
           <p>
             Tuna is the the current king of sushi fish. It grew in popularity in post-war Japan, and became the poster child for the global sushi boom.
