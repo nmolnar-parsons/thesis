@@ -16,9 +16,14 @@ import StorySection from '../components/story/StorySection.vue'
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-top: 12vh;
   text-align: center;
   color: #f8fafc;
+  background-image: url('../visuals/tuna-earth/earth-nigiri.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .kicker {
@@ -32,5 +37,6 @@ h1 {
   margin: 0.65rem 0 0;
   font-size: clamp(2rem, 4vw, 4.2rem);
   max-width: 12ch;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
 }
 </style>
