@@ -6,7 +6,7 @@ import SectionToyosuPrices from './sections/SectionToyosuPrices.vue'
 import SectionStackedBars from './sections/SectionStackedBars.vue'
 import SectionTitle from './sections/SectionTitle.vue'
 import SectionCountryProduction from './sections/SectionCountryProduction.vue'
-import SectionFutures from './sections/SectionFutures.vue'
+import SectionDomesticImports from './sections/SectionDomesticImports.vue'
 </script>
 
 <template>
@@ -18,6 +18,6 @@ import SectionFutures from './sections/SectionFutures.vue'
     <SectionStackedBars />
     <SectionMap />
     <SectionCountryProduction />
-    <SectionFutures />
+    <SectionDomesticImports />
   </main>
 </template>

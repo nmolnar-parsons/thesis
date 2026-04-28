@@ -22,6 +22,7 @@ const LIGHT_BLUE = '#bfdbfe'
 const DEEP_BLUE = '#1d4ed8'
 const AQUA_MARINE = '#38bdf8'
 const YEAR_START = 1965
+const YEAR_END = 2023
 
 const SERIES_KEYS = ['CAPTURE', 'MARINE']
 const SERIES_LABELS = {
@@ -41,7 +42,7 @@ function parseProductionData() {
   }))
     .filter((d) => Number.isFinite(d.year) && Number.isFinite(d.value) && d.country && d.species)
     .filter((d) => TARGET_SPECIES.has(d.species))
-    .filter((d) => d.year >= YEAR_START)
+    .filter((d) => d.year >= YEAR_START && d.year <= YEAR_END)
 
   const grouped = rollup(
     rows,
@@ -81,7 +82,7 @@ function parseAquacultureRowsForYears(years) {
       Number.isFinite(d.value) &&
       d.productionType &&
       SERIES_KEYS.includes(d.productionType) &&
-      d.year >= YEAR_START,
+      d.year >= YEAR_START && d.year <= YEAR_END,
   )
 
   const byYear = rollup(
@@ -241,7 +242,7 @@ function drawChart() {
     if (!selected) return
 
     const value = selected[series.key] || 0
-    tooltipEl.innerHTML = `<div class="country">${series.key}</div><div>${clampedYear}: ${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} tonnes</div>${aquacultureHtmlForYear(clampedYear)}`
+    tooltipEl.innerHTML = `<div class="country">${series.key}</div><div>${clampedYear}: ${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} tonnes</div>`
     tooltipEl.style.opacity = '1'
     tooltipEl.style.left = `${event.offsetX + 14}px`
     tooltipEl.style.top = `${event.offsetY + 14}px`
@@ -258,7 +259,7 @@ function drawChart() {
     const pct = totalA > 0 ? (tonnes / totalA) * 100 : 0
     const label = SERIES_LABELS[series.key] || series.key
     const imp = importTotalForYear(clampedYear)
-    tooltipEl.innerHTML = `<div class="country">${label}</div><div>${clampedYear}: ${pct.toFixed(1)}% of wild/farmed total · ${tonnes.toLocaleString(undefined, { maximumFractionDigits: 1 })} t</div><div class="tooltip-note">Imports (all countries): ${imp.toLocaleString(undefined, { maximumFractionDigits: 1 })} t</div>`
+    tooltipEl.innerHTML = `<div class="country">${label}</div><div>${clampedYear}: ${pct.toFixed(1)}% </div></div>`
     tooltipEl.style.opacity = '1'
     tooltipEl.style.left = `${event.offsetX + 14}px`
     tooltipEl.style.top = `${event.offsetY + 14}px`
