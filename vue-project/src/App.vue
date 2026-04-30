@@ -16,8 +16,8 @@ import DomesticImports from './sections/DomesticImports.vue'
     <Breakdown />
     <ToyosuPrices />
     <StackedBars />
-    <Map />
     <CountryProduction />
+    <Map />
     <DomesticImports />
   </main>
 </template>

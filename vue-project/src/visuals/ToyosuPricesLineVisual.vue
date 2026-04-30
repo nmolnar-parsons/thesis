@@ -3,8 +3,8 @@ import { max, min } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { csvParse } from 'd3-dsv'
 import { line } from 'd3-shape'
-import { scaleLinear, scaleOrdinal } from 'd3-scale'
-import { schemeCategory10 } from 'd3-scale-chromatic'
+import { scaleLinear } from 'd3-scale'
+import { interpolatePuBu } from 'd3-scale-chromatic'
 import { pointer, select } from 'd3-selection'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import csvRaw from '../data/toyosu_tuna_04-23.csv?raw'
@@ -20,6 +20,9 @@ let seriesRows = []
 const YEAR_START = 2004
 const YEAR_END = 2023
 const PRICE_CAP_YEN = 16000
+const SEAFOOD_AVERAGE_PRICE_YEN = 1222
+const MIN_YEAR_OPACITY = 0.18
+const MAX_YEAR_OPACITY = 1
 
 const orderedYears = computed(() => yearsRef.value)
 
@@ -90,7 +93,10 @@ function drawChart() {
   const xScale = scaleLinear().domain([1, 52]).range([0, innerWidth])
   const yScale = scaleLinear().domain([Math.max(0, yMin * 0.92), yMax * 1.06]).range([innerHeight, 0])
 
-  const colorScale = scaleOrdinal().domain(orderedYears.value).range(schemeCategory10)
+  const colorScale = scaleLinear()
+    .domain([YEAR_START, YEAR_END])
+    .range([0.42, 0.96])
+    .clamp(true)
 
   const lineGen = line()
     .x((d) => xScale(d.weekInYear))
@@ -118,7 +124,24 @@ function drawChart() {
     .attr('x', -innerHeight / 2)
     .attr('y', -54)
     .attr('text-anchor', 'middle')
-    .text('Toyosu Mid Price (yen)')
+    .text('median price per kg of bluefin')
+
+  const averagePriceY = yScale(SEAFOOD_AVERAGE_PRICE_YEN)
+  if (Number.isFinite(averagePriceY) && averagePriceY >= 0 && averagePriceY <= innerHeight) {
+    g.append('line')
+      .attr('class', 'average-price-line')
+      .attr('x1', 0)
+      .attr('x2', innerWidth)
+      .attr('y1', averagePriceY)
+      .attr('y2', averagePriceY)
+
+    g.append('text')
+      .attr('class', 'average-price-label')
+      .attr('x', innerWidth - 8)
+      .attr('y', averagePriceY - 6)
+      .attr('text-anchor', 'end')
+      .text('average price per kg of seafood product')
+  }
 
   const yearGroups = g
     .selectAll('.year-group')
@@ -132,7 +155,8 @@ function drawChart() {
     .attr('class', 'year-line')
     .attr('data-year', (d) => d.year)
     .attr('d', (d) => lineGen(d.values))
-    .attr('stroke', (d) => colorScale(d.year))
+    .attr('stroke', (d) => interpolatePuBu(colorScale(d.year)))
+    .attr('stroke-opacity', (d) => yearOpacity(d.year))
     .attr('fill', 'none')
     .attr('stroke-width', 2)
 
@@ -174,7 +198,11 @@ function drawChart() {
 function setActiveYear(year) {
   if (!svg) return
   const root = select(svg.node().parentNode)
-  root.selectAll('.year-line').classed('is-active', (d) => d.year === year).classed('is-inactive', (d) => d.year !== year)
+  root
+    .selectAll('.year-line')
+    .classed('is-active', (d) => d.year === year)
+    .classed('is-inactive', (d) => d.year !== year)
+    .attr('stroke-opacity', (d) => (d.year === year ? 1 : 0.14))
   root
     .selectAll('.legend-item')
     .classed('is-active', (_d, i, nodes) => Number(nodes[i].getAttribute('data-year')) === year)
@@ -184,13 +212,33 @@ function setActiveYear(year) {
 function clearActiveYear() {
   if (!svg) return
   const root = select(svg.node().parentNode)
-  root.selectAll('.year-line').classed('is-active', false).classed('is-inactive', false)
+  root
+    .selectAll('.year-line')
+    .classed('is-active', false)
+    .classed('is-inactive', false)
+    .attr('stroke-opacity', (d) => yearOpacity(d.year))
   root.selectAll('.legend-item').classed('is-active', false).classed('is-inactive', false)
 }
 
 function yearColor(year) {
-  if (!orderedYears.value.length) return '#64748b'
-  return scaleOrdinal().domain(orderedYears.value).range(schemeCategory10)(year)
+  return blueWithOpacity(year, yearOpacity(year))
+}
+
+function yearOpacity(year) {
+  const opacityScale = scaleLinear()
+    .domain([YEAR_START, YEAR_END])
+    .range([MIN_YEAR_OPACITY, MAX_YEAR_OPACITY])
+    .clamp(true)
+  return opacityScale(year)
+}
+
+function blueWithOpacity(year, opacity) {
+  const shadeScale = scaleLinear()
+    .domain([YEAR_START, YEAR_END])
+    .range([0.42, 0.96])
+    .clamp(true)
+  const rgb = interpolatePuBu(shadeScale(year))
+  return rgb.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`)
 }
 
 onMounted(() => {
@@ -288,23 +336,45 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.linechart-wrap :deep(.average-price-line) {
+  stroke: #dc2626;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.linechart-wrap :deep(.average-price-label) {
+  fill: #dc2626;
+  font-size: 0.68rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
 .legend {
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  max-height: calc(100% - 1.5rem);
+  top: 0.45rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-height: calc(100% - 0.9rem);
   overflow: auto;
-  padding: 0.45rem 0.55rem;
-  border-radius: 0.5rem;
-  background: rgba(248, 250, 252, 0.94);
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .legend-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
 }
 
 .legend-item {
@@ -356,8 +426,8 @@ onUnmounted(() => {
 
   .legend {
     max-height: 45%;
-    max-width: min(9.5rem, calc(100% - 1rem));
-    padding: 0.35rem 0.45rem;
+    max-width: calc(100% - 1rem);
+    top: 0.35rem;
   }
 }
 </style>

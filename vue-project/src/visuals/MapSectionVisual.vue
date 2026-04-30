@@ -5,6 +5,7 @@ import { schemePuBu } from 'd3-scale-chromatic'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 // import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch.geojson?url'
 import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
+import tunaCatchDataRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
 
 
 const YEAR_START = 1965
@@ -22,8 +23,12 @@ const props = defineProps({
 })
 
 const mapRef = ref(null)
+const mapFrameRef = ref(null)
+const metricsCardRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
+const mapFrameHeightPx = ref(0)
+const metricsCardHeightPx = ref(0)
 let map = null
 let resizeObserver = null
 
@@ -42,6 +47,102 @@ const currentYear = computed(() => {
   const y = YEAR_START + yearTimelineT.value * span
   return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(y)))
 })
+
+function parseYearlyTotals() {
+  const empty = new Map()
+  try {
+    const parsed = JSON.parse(tunaCatchDataRaw)
+    const features = Array.isArray(parsed?.features) ? parsed.features : []
+    const yearly = new Map()
+    for (let y = YEAR_START; y <= YEAR_END; y += 1) {
+      yearly.set(y, { count: 0, tonnes: 0 })
+    }
+    for (const feature of features) {
+      const props = feature?.properties || {}
+      for (let y = YEAR_START; y <= YEAR_END; y += 1) {
+        const count = Number(props[`count_${y}`]) || 0
+        const tonnes = Number(props[`tonne_${y}`]) || 0
+        const entry = yearly.get(y)
+        entry.count += count
+        entry.tonnes += tonnes
+      }
+    }
+    return yearly
+  } catch (error) {
+    console.warn('MapSectionVisual: failed to parse yearly tuna totals.', error)
+    return empty
+  }
+}
+
+const yearlyTotals = parseYearlyTotals()
+
+const countRange = computed(() => {
+  const values = Array.from(yearlyTotals.values(), (d) => d.count)
+  const min = Math.min(...values, 0)
+  const max = Math.max(...values, 1)
+  return { min, max }
+})
+
+const tonnesRange = computed(() => {
+  const values = Array.from(yearlyTotals.values(), (d) => d.tonnes + d.count * COUNT_TO_TONNE)
+  const min = Math.min(...values, 0)
+  const max = Math.max(...values, 1)
+  return { min, max }
+})
+
+const currentYearTotals = computed(() => {
+  const entry = yearlyTotals.get(currentYear.value) || { count: 0, tonnes: 0 }
+  const totalCount = entry.count
+  const totalTonnes = entry.tonnes + totalCount * COUNT_TO_TONNE
+  return { totalCount, totalTonnes }
+})
+
+function clamp01(v) {
+  return Math.min(1, Math.max(0, v))
+}
+
+function normalize(value, min, max) {
+  if (max <= min) return 0
+  return clamp01((value - min) / (max - min))
+}
+
+function colorByIntensity(intensity) {
+  const t = clamp01(intensity)
+  const channel = Math.round(122 - 100 * t)
+  return `rgb(${channel}, ${channel}, ${channel})`
+}
+
+const countNumberColor = computed(() => {
+  const t = normalize(currentYearTotals.value.totalCount, countRange.value.min, countRange.value.max)
+  return colorByIntensity(t)
+})
+
+const tonnesNumberColor = computed(() => {
+  const t = normalize(currentYearTotals.value.totalTonnes, tonnesRange.value.min, tonnesRange.value.max)
+  return colorByIntensity(t)
+})
+
+const metricsCardStyle = computed(() => {
+  const progress = clamp01(yearTimelineT.value)
+  const maxTop = Math.max(0, mapFrameHeightPx.value - metricsCardHeightPx.value)
+  return {
+    top: `${progress * maxTop}px`,
+    left: '0.85rem',
+  }
+})
+
+function updateMetricsLayout() {
+  mapFrameHeightPx.value = mapFrameRef.value?.clientHeight || 0
+  metricsCardHeightPx.value = metricsCardRef.value?.offsetHeight || 0
+}
+
+function formatCount(v) {
+  return Math.round(v).toLocaleString()
+}
+
+function formatTonnes(v) {
+  return v.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
 
 const tunaColorExpression = computed(() => {
   const y = currentYear.value
@@ -112,6 +213,7 @@ function updateCameraForStep(stepIndex) {
 
 onMounted(() => {
   if (!mapRef.value) return
+  updateMetricsLayout()
 
   const mapboxToken = (
     import.meta.env.VITE_MAPBOX_TOKEN ||
@@ -174,10 +276,13 @@ onMounted(() => {
   })
 
   resizeObserver = new ResizeObserver(() => {
+    updateMetricsLayout()
     if (!map || !mapReady.value) return
     map.resize()
   })
-  resizeObserver.observe(mapRef.value)
+  if (mapRef.value) resizeObserver.observe(mapRef.value)
+  if (mapFrameRef.value) resizeObserver.observe(mapFrameRef.value)
+  if (metricsCardRef.value) resizeObserver.observe(metricsCardRef.value)
 })
 
 watch(
@@ -189,6 +294,7 @@ watch(
 
 watch(currentYear, () => {
   updateCatchLayer()
+  updateMetricsLayout()
 })
 
 onUnmounted(() => {
@@ -200,9 +306,23 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="map-frame">
+  <div ref="mapFrameRef" class="map-frame">
     <div ref="mapRef" class="map-host" />
-    <p class="year-label">{{ currentYear }}</p>
+    <div ref="metricsCardRef" class="metrics-card" :style="metricsCardStyle">
+      <p class="year-text">{{ currentYear }}</p>
+      <p class="metric-line">
+        <span class="metric-caption">Total fish caught:</span>
+        <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
+      </p>
+      <p class="metric-line">
+        <span class="metric-caption">Total catch:</span>
+        <span class="metric-value" :style="{ color: tonnesNumberColor }">{{ formatTonnes(currentYearTotals.totalTonnes) }} tonnes</span>
+      </p>
+      <p class="metric-line metric-line-temp">
+        <span class="metric-caption">Global ocean temperature:</span>
+        <span>—</span>
+      </p>
+    </div>
 
     <p v-if="tokenMissing" class="token-warning">
       Add `VITE_MAPBOX_TOKEN` in your local `.env` to render the map.
@@ -224,20 +344,47 @@ onUnmounted(() => {
   /* border: 1px solid rgba(148, 163, 184, 0.6); */
 }
 
-.year-label {
+.metrics-card {
   position: absolute;
-  top: .25rem;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 6;
   margin: 0;
-  padding: 0.35rem 0.7rem;
-  border-radius: 0.4rem;
-  /* background: rgba(255, 255, 255, 0.88); */
-  color: #ffffff;
-  font-size: 0.95rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+  color: #000000;
+  min-width: min(280px, calc(100% - 2rem));
+  max-width: min(320px, calc(100% - 2rem));
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+}
+
+.year-text {
+  margin: 0 0 0.35rem;
+  color: #000000;
+  font-size: clamp(1.6rem, 2.9vw, 2.4rem);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.metric-line {
+  margin: 0.2rem 0;
+  color: #000000;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.metric-caption {
+  font-weight: 700;
+  margin-right: 0.35rem;
+}
+
+.metric-value {
   font-weight: 600;
-  letter-spacing: 0.04em;
+}
+
+.metric-line-temp {
+  margin-top: 0.4rem;
 }
 
 .token-warning {

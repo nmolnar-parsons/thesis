@@ -26,7 +26,7 @@ const SPECIES_COLORS = {
   BFT: '#17203D',
   SBF: '#B3BFD1',
   YFT: '#E5D76A',
-  BET: '#E3F1F5',
+  BET: '#C2BD88',
 }
 
 const STAGES = [
