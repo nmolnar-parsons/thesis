@@ -56,6 +56,12 @@ const steps = [
 <style scoped>
 #stacked-bars :deep(.sticky-graphic) {
   background: var(--color-section-surface);
+  display: flex;
+  align-items: center;
+}
+
+#stacked-bars :deep(.sticky-graphic > *) {
+  width: 100%;
 }
 
 #stacked-bars :deep(.scroll-step) {
@@ -86,5 +92,16 @@ const steps = [
 #stacked-bars :deep(.scroll-step .copy-block),
 #stacked-bars :deep(.step-card) {
   pointer-events: auto;
+}
+
+@media (max-width: 980px) {
+  #stacked-bars :deep(.scroll-step) {
+    padding-right: clamp(0.75rem, 6vw, 2rem);
+  }
+
+  #stacked-bars :deep(.scroll-step .copy-block),
+  #stacked-bars :deep(.step-card) {
+    max-width: min(32rem, calc(100% - 1.5rem));
+  }
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup>
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import { schemePuBu } from 'd3-scale-chromatic'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 // import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch.geojson?url'
 import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
@@ -8,10 +9,10 @@ import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geoj
 
 const YEAR_START = 1965
 const YEAR_END = 2023
-const DEFAULT_PROJECTION = 'winkelTripel'
-let OCEAN_COLOR = '#1b4974'
+const DEFAULT_PROJECTION = 'naturalEarth'
 /** 250 kg per bluefin on average; convert head-count to metric tonnes. */
 const COUNT_TO_TONNE = 250 / 1000
+const PUBU_COLORS = schemePuBu[9]
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
@@ -24,6 +25,7 @@ const mapRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
 let map = null
+let resizeObserver = null
 
 /** Years animate across all scroll steps except the last (e.g. North Atlantic). */
 const yearTimelineT = computed(() => {
@@ -49,17 +51,17 @@ const tunaColorExpression = computed(() => {
     ['*', COUNT_TO_TONNE, ['coalesce', ['get', `count_${y}`], 0]],
   ]
   return [
-    'interpolate',
-    ['linear'],
+    'step',
     combinedTonnes,
-    0, OCEAN_COLOR,
-    100, '#FFD700',
-    500, '#FF8C00',
-    1000, '#FF6347',
-    5000, '#DC143C',
-    10000, '#8B0000',
-    50000, '#660000',
-    100000, '#330000',
+    PUBU_COLORS[0],
+    10, PUBU_COLORS[1],
+    50, PUBU_COLORS[2],
+    100, PUBU_COLORS[3],
+    250, PUBU_COLORS[4],
+    500, PUBU_COLORS[5],
+    1000, PUBU_COLORS[6],
+    5000, PUBU_COLORS[7],
+    10000, PUBU_COLORS[8],
   ]
 })
 
@@ -76,6 +78,20 @@ function hideMapLabels() {
 function setProjection() {
   if (!map || !mapReady.value) return
   map.setProjection(DEFAULT_PROJECTION)
+  map.setFog({
+    'range': [1, 10],
+    'color': 'rgba(186, 186, 163, 0)',      // Fully transparent lower atmosphere
+    'high-color': 'rgba(0, 0, 0, 0)', // Fully transparent upper atmosphere
+    'space-color': 'rgb(0, 0, 0)', // Make space background transparent
+    'star-intensity': 0               // Remove stars
+  });
+}
+
+function neutralizeWaterColor() {
+  if (!map || !mapReady.value) return
+  if (!map.getLayer('water')) return
+  map.setPaintProperty('water', 'fill-color', '#e5e7eb')
+  map.setPaintProperty('water', 'fill-opacity', 0.9)
 }
 
 function updateCatchLayer() {
@@ -144,7 +160,7 @@ onMounted(() => {
       },
       'source-layer': 'country_boundaries',
       'paint': {
-          'fill-color': '#ffffff',
+          'fill-color': '#d1d5db',
           'fill-opacity': 1
       }
     })
@@ -152,9 +168,16 @@ onMounted(() => {
     mapReady.value = true
     hideMapLabels()
     setProjection()
+    neutralizeWaterColor()
     updateCatchLayer()
     updateCameraForStep(props.activeStep)
   })
+
+  resizeObserver = new ResizeObserver(() => {
+    if (!map || !mapReady.value) return
+    map.resize()
+  })
+  resizeObserver.observe(mapRef.value)
 })
 
 watch(
@@ -169,6 +192,8 @@ watch(currentYear, () => {
 })
 
 onUnmounted(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
   if (map) map.remove()
   map = null
 })

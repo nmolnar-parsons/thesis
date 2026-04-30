@@ -21,6 +21,8 @@ const TARGET_SPECIES = new Set(['SBF', 'BFT', 'PBF'])
 const LIGHT_BLUE = '#bfdbfe'
 const DEEP_BLUE = '#1d4ed8'
 const AQUA_MARINE = '#38bdf8'
+const UNREPORTED_COUNTRY = 'Unreported'
+const UNREPORTED_GREY = '#9ca3af'
 const YEAR_START = 1965
 const YEAR_END = 2023
 
@@ -36,11 +38,11 @@ const PANEL_GAP = 8
 function parseProductionData() {
   const rows = csvParse(csvRaw, (d) => ({
     year: Number(d.year),
-    country: d.country?.trim(),
+    country: d.country?.trim() || UNREPORTED_COUNTRY,
     species: d.species?.trim(),
     value: Number(d.measurement_value),
   }))
-    .filter((d) => Number.isFinite(d.year) && Number.isFinite(d.value) && d.country && d.species)
+    .filter((d) => Number.isFinite(d.year) && Number.isFinite(d.value) && d.species)
     .filter((d) => TARGET_SPECIES.has(d.species))
     .filter((d) => d.year >= YEAR_START && d.year <= YEAR_END)
 
@@ -58,7 +60,11 @@ function parseProductionData() {
   )
 
   const years = Array.from(grouped.keys()).sort((a, b) => a - b)
-  const countries = Array.from(new Set(rows.map((d) => d.country))).sort()
+  const countries = Array.from(new Set(rows.map((d) => d.country))).sort((a, b) => {
+    if (a === UNREPORTED_COUNTRY) return -1
+    if (b === UNREPORTED_COUNTRY) return 1
+    return a.localeCompare(b)
+  })
 
   const stackRows = years.map((year) => {
     const entry = { year }
@@ -113,9 +119,11 @@ function drawChart() {
   const host = hostRef.value
   const width = host.clientWidth || 800
   const height = host.clientHeight || 520
+  if (width < 20 || height < 20) return
   const margin = { top: 28, right: 24, bottom: 48, left: 64 }
   const innerWidth = width - margin.left - margin.right
   const available = height - margin.top - margin.bottom
+  if (innerWidth < 20 || available < 20) return
 
   const hTop = Math.max(120, ((available - X_AXIS_BAND - PANEL_GAP) * 3) / 4)
   const hBottom = Math.max(48, hTop / 3)
@@ -135,7 +143,8 @@ function drawChart() {
   const stackGen = stack().keys(countries)
   const layers = stackGen(stackRows)
 
-  const maxY = max(layers, (series) => max(series, (point) => point[1])) ?? 1
+  const stackedMax = max(layers, (series) => max(series, (point) => point[1])) ?? 1
+  const maxY = Math.max(1, stackedMax * 1.5)
   const xScale = scaleLinear().domain([years[0], years[years.length - 1]]).range([0, innerWidth])
   const yScaleTop = scaleLinear().domain([0, maxY]).range([hTop, 0])
 
@@ -150,7 +159,11 @@ function drawChart() {
   const maxTotal = Math.max(...nonJapanTotals, 1)
   const blueScale = scaleLinear().domain([minTotal, maxTotal]).range([LIGHT_BLUE, DEEP_BLUE])
   const getCountryColor = (country) =>
-    country.toLowerCase() === 'japan' ? JAPAN_RED : blueScale(countryTotals.get(country) || 0)
+    country === UNREPORTED_COUNTRY
+      ? UNREPORTED_GREY
+      : country.toLowerCase() === 'japan'
+        ? JAPAN_RED
+        : blueScale(countryTotals.get(country) || 0)
 
   const getAquaColor = (key) => (key === 'CAPTURE' ? DEEP_BLUE : AQUA_MARINE)
 
@@ -314,30 +327,38 @@ function drawChart() {
   gTop.append('g').attr('class', 'axis axis-y').call(
     axisLeft(yScaleTop).tickFormat((d) => Number(d).toLocaleString(undefined, { maximumFractionDigits: 0 })),
   )
+  gTop.selectAll('.axis-y .tick text').attr('font-size', 10)
 
   gAqua.append('g').attr('class', 'axis axis-y axis-y-aqua').call(
     axisLeft(yScaleAqua)
       .ticks(3)
       .tickFormat((d) => `${Math.round(Number(d) * 100)}%`),
   )
+  gAqua.selectAll('.axis-y-aqua .tick text').attr('font-size', 10)
 
   gTop
     .append('text')
     .attr('class', 'axis-label')
+    .attr('text-anchor', 'middle')
     .attr('transform', 'rotate(-90)')
     .attr('y', -margin.left + 5)
     .attr('x', -hTop / 2)
-    .attr('dy', '.8em')
+    .attr('dy', '.32em')
+    .attr('fill', '#334155')
+    .attr('font-size', 11)
     .text('Catch (tonnes)')
 
   gAqua
     .append('text')
     .attr('class', 'axis-label axis-label-aqua')
+    .attr('text-anchor', 'middle')
     .attr('transform', 'rotate(-90)')
     .attr('y', -margin.left + 5)
     .attr('x', -hBottom / 2)
-    .attr('dy', '.8em')
-    .text('Wild vs farmed (share)')
+    .attr('dy', '.32em')
+    .attr('fill', '#334155')
+    .attr('font-size', 11)
+    .text('Wild/Farmed Proportion')
 
   hoverLine.raise()
   hoverLabel.raise()
@@ -371,17 +392,17 @@ onUnmounted(() => {
 
 <style scoped>
 .streamgraph-wrap {
+  --viz-height: clamp(340px, 78vh, 640px);
   position: relative;
   width: 100%;
-  height: 100%;
-  min-height: min(78vh, 640px);
+  height: var(--viz-height);
+  max-height: 640px;
   overflow: hidden;
 }
 
 .d3-host {
   width: 100%;
   height: 100%;
-  min-height: min(78vh, 640px);
 }
 
 .d3-host :deep(svg) {
@@ -456,5 +477,12 @@ onUnmounted(() => {
   border-top: 1px solid rgba(248, 250, 252, 0.2);
   font-size: 0.7rem;
   color: #cbd5e1;
+}
+
+@media (max-width: 900px) {
+  .streamgraph-wrap {
+    --viz-height: clamp(270px, 60vh, 480px);
+    max-height: 480px;
+  }
 }
 </style>

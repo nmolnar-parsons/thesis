@@ -72,9 +72,11 @@ function drawChart() {
   const host = hostRef.value
   const width = host.clientWidth || 860
   const height = host.clientHeight || 520
+  if (width < 20 || height < 20) return
   const margin = { top: 28, right: 24, bottom: 46, left: 72 }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
+  if (innerWidth < 20 || innerHeight < 20) return
 
   svg.attr('width', width).attr('height', height)
   svg.selectAll('*').remove()
@@ -234,17 +236,17 @@ onUnmounted(() => {
 
 <style scoped>
 .linechart-wrap {
+  --viz-height: clamp(320px, 70vh, 560px);
   position: relative;
   width: 100%;
-  height: 100%;
-  min-height: min(70vh, 560px);
+  height: var(--viz-height);
+  max-height: 560px;
   overflow: hidden;
 }
 
 .d3-host {
   width: 100%;
   height: 100%;
-  min-height: min(70vh, 560px);
 }
 
 .d3-host :deep(svg) {
@@ -344,5 +346,18 @@ onUnmounted(() => {
   font-size: 0.7rem;
   line-height: 1.25;
   box-shadow: 0 4px 16px rgba(2, 6, 23, 0.35);
+}
+
+@media (max-width: 900px) {
+  .linechart-wrap {
+    --viz-height: clamp(260px, 58vh, 460px);
+    max-height: 460px;
+  }
+
+  .legend {
+    max-height: 45%;
+    max-width: min(9.5rem, calc(100% - 1rem));
+    padding: 0.35rem 0.45rem;
+  }
 }
 </style>

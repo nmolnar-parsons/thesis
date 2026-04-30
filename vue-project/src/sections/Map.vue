@@ -32,10 +32,21 @@ const steps = [
 </template>
 
 <style scoped>
+#map :deep(.sticky-graphic) {
+  background: transparent;
+}
+
 #map :deep(.step-column) {
   /* Delay first step activation until map has fully pinned. */
   padding-top: 90vh;
   /* Keep map pinned until the final step reaches the top. */
   padding-bottom: 90vh;
+}
+
+@media (max-width: 900px) {
+  #map :deep(.step-column) {
+    padding-top: 70vh;
+    padding-bottom: 70vh;
+  }
 }
 </style>

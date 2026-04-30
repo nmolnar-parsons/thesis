@@ -151,7 +151,7 @@ function yearsWithinRange(years, yearRange) {
 
 function yDomainMax(rawMax) {
   if (rawMax <= 0) return 1
-  return rawMax * 1.08
+  return rawMax * 1.5
 }
 
 function xTickYearsDecadal(years) {
@@ -215,9 +215,11 @@ function drawChart() {
 
   const width = el.clientWidth || 800
   const height = el.clientHeight || 480
+  if (width < 20 || height < 20) return
   const margin = { top: 28, right: 160, bottom: 48, left: 62 }
   const innerW = width - margin.left - margin.right
   const innerH = height - margin.top - margin.bottom
+  if (innerW < 20 || innerH < 20) return
 
   svg.attr('width', width).attr('height', height)
 
@@ -478,10 +480,11 @@ onUnmounted(() => {
 
 <style scoped>
 .stacked-wrap {
+  --viz-height: clamp(420px, 82vh, 700px);
   position: relative;
   width: 100%;
-  height: 100%;
-  min-height: min(70vh, 560px);
+  height: var(--viz-height);
+  max-height: 700px;
   /* background: #fff; */
   /* border: 1px solid #cbd5e1; */
   /* border-radius: 0.75rem; */
@@ -491,7 +494,6 @@ onUnmounted(() => {
 .d3-host {
   width: 100%;
   height: 100%;
-  min-height: min(70vh, 560px);
 }
 
 .stacked-wrap :deep(.stacked-svg) {
@@ -579,5 +581,17 @@ onUnmounted(() => {
 .legend-leave-to {
   opacity: 0;
   transform: translateX(6px);
+}
+
+@media (max-width: 900px) {
+  .stacked-wrap {
+    --viz-height: clamp(320px, 68vh, 560px);
+    max-height: 560px;
+  }
+
+  .legend {
+    max-width: 9.25rem;
+    padding: 0.4rem 0.5rem;
+  }
 }
 </style>

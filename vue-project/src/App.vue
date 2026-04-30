@@ -1,23 +1,23 @@
 <script setup>
-import SectionIntro from './sections/SectionIntro.vue'
-import SectionMap from './sections/SectionMap.vue'
-import SectionBreakdown from './sections/SectionBreakdown.vue'
-import SectionToyosuPrices from './sections/SectionToyosuPrices.vue'
-import SectionStackedBars from './sections/SectionStackedBars.vue'
-import SectionTitle from './sections/SectionTitle.vue'
-import SectionCountryProduction from './sections/SectionCountryProduction.vue'
-import SectionDomesticImports from './sections/SectionDomesticImports.vue'
+import Intro from './sections/Intro.vue'
+import Map from './sections/Map.vue'
+import Breakdown from './sections/Breakdown.vue'
+import ToyosuPrices from './sections/ToyosuPrices.vue'
+import StackedBars from './sections/StackedBars.vue'
+import Title from './sections/Title.vue'
+import CountryProduction from './sections/CountryProduction.vue'
+import DomesticImports from './sections/DomesticImports.vue'
 </script>
 
 <template>
   <main class="story-page">
-    <SectionTitle />
-    <SectionIntro />
-    <SectionBreakdown />
-    <SectionToyosuPrices />
-    <SectionStackedBars />
-    <SectionMap />
-    <SectionCountryProduction />
-    <SectionDomesticImports />
+    <Title />
+    <Intro />
+    <Breakdown />
+    <ToyosuPrices />
+    <StackedBars />
+    <Map />
+    <CountryProduction />
+    <DomesticImports />
   </main>
 </template>
