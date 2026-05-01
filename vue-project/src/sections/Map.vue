@@ -5,10 +5,16 @@ import StorySection from '../components/story/StorySection.vue'
 import MapSectionVisual from '../visuals/MapSectionVisual.vue'
 
 const steps = [
-  { id: 'm1', title: 'Maybe change this to only show bluefin', text: '' },
-  { id: 'm2', title: '', text: 'Thing2' },
-  { id: 'm3', title: '', text: 'Thing3' },
-  { id: 'm4', title: '', text: 'In the North Atlantic, tuna fishing has moved away from tropical/temperate waters towards the North Pole. The Mediterranean has become a hotspot as well.' },
+  { id: 'm1', title: '', text: '' },
+  { id: 'm2', title: '', text: '' },
+  { id: 'm3', title: '', text: '' },
+  { id: 'm4', title: '', text: '' },
+  { id: 'm5', title: '', text: '' },
+  { id: 'm6', title: '', text: '' },
+  { id: 'm7', title: '', text: '' },
+  { id: 'm8', title: '', text: '' },
+  { id: 'm9', title: '', text: '' },
+  { id: 'm10', title: '', text: '' },
 ]
 </script>
 
@@ -23,7 +29,7 @@ const steps = [
         />
       </template>
       <template #step="{ step }">
-        <CopyBlock eyebrow="" :title="step.title">
+        <CopyBlock v-if="step.title || step.text" eyebrow="" :title="step.title">
           <p>{{ step.text }}</p>
         </CopyBlock>
       </template>

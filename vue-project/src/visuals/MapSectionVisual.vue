@@ -14,32 +14,33 @@ const DEFAULT_PROJECTION = 'naturalEarth'
 /** 250 kg per bluefin on average; convert head-count to metric tonnes. */
 const COUNT_TO_TONNE = 250 / 1000
 const PUBU_COLORS = schemePuBu[9]
+const STEP_YEAR_FULLVIEW_END = 4
+const STEP_NORTH_ATLANTIC = 5
+const STEP_NORTH_ATLANTIC_LINGER = 6
+const STEP_BAJA = 7
+const STEP_BAJA_LINGER = 8
+const STEP_RETURN_FULL = 9
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
   /** Scrollama progress through the current step, roughly 0–1. */
   stepProgress: { type: Number, default: 0 },
-  stepCount: { type: Number, default: 4 },
+  stepCount: { type: Number, default: 10 },
 })
 
 const mapRef = ref(null)
-const mapFrameRef = ref(null)
-const metricsCardRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
-const mapFrameHeightPx = ref(0)
-const metricsCardHeightPx = ref(0)
 let map = null
 let resizeObserver = null
+let activeCameraKey = ''
 
-/** Years animate across all scroll steps except the last (e.g. North Atlantic). */
+/** Years animate to 2023 before any regional zoom begins. */
 const yearTimelineT = computed(() => {
-  const spanSteps = Math.max(1, props.stepCount - 1)
-  const lastTimedIndex = props.stepCount - 2
-  if (lastTimedIndex < 0) return 1
-  if (props.activeStep > lastTimedIndex) return 1
-  const pos = Math.min(props.activeStep + props.stepProgress, spanSteps)
-  return pos / spanSteps
+  const spanSteps = Math.max(1, STEP_YEAR_FULLVIEW_END + 1)
+  const timelinePos = props.activeStep + props.stepProgress
+  if (timelinePos >= spanSteps) return 1
+  return timelinePos / spanSteps
 })
 
 const currentYear = computed(() => {
@@ -122,18 +123,27 @@ const tonnesNumberColor = computed(() => {
   return colorByIntensity(t)
 })
 
-const metricsCardStyle = computed(() => {
-  const progress = clamp01(yearTimelineT.value)
-  const maxTop = Math.max(0, mapFrameHeightPx.value - metricsCardHeightPx.value)
-  return {
-    top: `${progress * maxTop}px`,
-    left: '0.85rem',
+const narrativeCopy = computed(() => {
+  if (props.activeStep >= STEP_BAJA && props.activeStep <= STEP_BAJA_LINGER) {
+    return 'Baja California is another rapidly shifting zone, with catches clustering farther north than in previous decades.'
   }
+  if (props.activeStep >= STEP_NORTH_ATLANTIC && props.activeStep <= STEP_NORTH_ATLANTIC_LINGER) {
+    return 'In the North Atlantic, tuna fishing has moved away from tropical and temperate waters toward the pole.'
+  }
+  if (props.activeStep >= STEP_RETURN_FULL) {
+    return 'Regional hotspots are intensifying while the full ocean picture continues to change.'
+  }
+  return 'By 2023, global bluefin catches show clear large-scale redistribution before regional hotspots come into focus.'
 })
 
-function updateMetricsLayout() {
-  mapFrameHeightPx.value = mapFrameRef.value?.clientHeight || 0
-  metricsCardHeightPx.value = metricsCardRef.value?.offsetHeight || 0
+function overlayOpacity(region) {
+  if (region === 'north') {
+    return props.activeStep >= STEP_NORTH_ATLANTIC && props.activeStep <= STEP_NORTH_ATLANTIC_LINGER ? 1 : 0
+  }
+  if (region === 'baja') {
+    return props.activeStep >= STEP_BAJA && props.activeStep <= STEP_BAJA_LINGER ? 1 : 0
+  }
+  return 0
 }
 
 function formatCount(v) {
@@ -200,20 +210,36 @@ function updateCatchLayer() {
   map.setPaintProperty('tuna-catch-fill', 'fill-color', tunaColorExpression.value)
 }
 
-function updateCameraForStep(stepIndex) {
-  if (!map) return
-  const lastIndex = props.stepCount - 1
-  if (lastIndex < 0) return
-  if (stepIndex === lastIndex) {
-    map.flyTo({ center: [-20, 45], zoom: 3, speed: 0.75, essential: true })
-  } else {
-    map.jumpTo({ center: [0, 0], zoom: 1.25, essential: true })
+function cameraForStep(stepIndex) {
+  const cameraPadding = window.innerWidth < 900
+    ? { top: 24, right: 24, bottom: 24, left: 64 }
+    : { top: 24, right: 40, bottom: 24, left: 220 }
+  if (stepIndex >= STEP_BAJA && stepIndex <= STEP_BAJA_LINGER) {
+    return { key: 'baja', center: [-114.5, 27.6], zoom: 3.5, duration: 2600, padding: cameraPadding }
   }
+  if (stepIndex >= STEP_NORTH_ATLANTIC && stepIndex <= STEP_NORTH_ATLANTIC_LINGER) {
+    return { key: 'northAtlantic', center: [-20, 45], zoom: 3.35, duration: 2600, padding: cameraPadding }
+  }
+  return { key: 'global', center: [0, 0], zoom: 1.25, duration: 2600, padding: cameraPadding }
+}
+
+function updateCameraForStep(stepIndex, force = false) {
+  if (!map || !mapReady.value) return
+  const nextCamera = cameraForStep(stepIndex)
+  if (!force && activeCameraKey === nextCamera.key) return
+  activeCameraKey = nextCamera.key
+  map.stop()
+  map.easeTo({
+    center: nextCamera.center,
+    zoom: nextCamera.zoom,
+    padding: nextCamera.padding,
+    duration: nextCamera.duration,
+    essential: true,
+  })
 }
 
 onMounted(() => {
   if (!mapRef.value) return
-  updateMetricsLayout()
 
   const mapboxToken = (
     import.meta.env.VITE_MAPBOX_TOKEN ||
@@ -272,17 +298,15 @@ onMounted(() => {
     setProjection()
     neutralizeWaterColor()
     updateCatchLayer()
-    updateCameraForStep(props.activeStep)
+    updateCameraForStep(props.activeStep, true)
   })
 
   resizeObserver = new ResizeObserver(() => {
-    updateMetricsLayout()
     if (!map || !mapReady.value) return
     map.resize()
+    updateCameraForStep(props.activeStep, true)
   })
   if (mapRef.value) resizeObserver.observe(mapRef.value)
-  if (mapFrameRef.value) resizeObserver.observe(mapFrameRef.value)
-  if (metricsCardRef.value) resizeObserver.observe(metricsCardRef.value)
 })
 
 watch(
@@ -294,7 +318,6 @@ watch(
 
 watch(currentYear, () => {
   updateCatchLayer()
-  updateMetricsLayout()
 })
 
 onUnmounted(() => {
@@ -306,22 +329,39 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="mapFrameRef" class="map-frame">
+  <div class="map-frame">
     <div ref="mapRef" class="map-host" />
-    <div ref="metricsCardRef" class="metrics-card" :style="metricsCardStyle">
-      <p class="year-text">{{ currentYear }}</p>
-      <p class="metric-line">
-        <span class="metric-caption">Total fish caught:</span>
-        <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
-      </p>
-      <p class="metric-line">
-        <span class="metric-caption">Total catch:</span>
-        <span class="metric-value" :style="{ color: tonnesNumberColor }">{{ formatTonnes(currentYearTotals.totalTonnes) }} tonnes</span>
-      </p>
-      <p class="metric-line metric-line-temp">
-        <span class="metric-caption">Global ocean temperature:</span>
-        <span>—</span>
-      </p>
+
+    <div class="hud-row">
+      <div class="metrics-card">
+        <p class="year-text">{{ currentYear }}</p>
+        <p class="metric-line">
+          <span class="metric-caption">Total fish caught:</span>
+          <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
+        </p>
+        <p class="metric-line">
+          <span class="metric-caption">Total catch:</span>
+          <span class="metric-value" :style="{ color: tonnesNumberColor }">{{ formatTonnes(currentYearTotals.totalTonnes) }} tonnes</span>
+        </p>
+        <p class="metric-line metric-line-temp">
+          <span class="metric-caption">Global ocean temperature:</span>
+          <span>—</span>
+        </p>
+      </div>
+      <div class="copy-card">
+        <p>{{ narrativeCopy }}</p>
+      </div>
+    </div>
+
+    <div class="callout-layer">
+      <div class="region-callout north-callout" :style="{ opacity: overlayOpacity('north') }">
+        <div class="callout-circle"></div>
+        <p class="callout-label">warming quickly!</p>
+      </div>
+      <div class="region-callout baja-callout" :style="{ opacity: overlayOpacity('baja') }">
+        <div class="callout-circle"></div>
+        <p class="callout-label">warming quickly!</p>
+      </div>
     </div>
 
     <p v-if="tokenMissing" class="token-warning">
@@ -341,12 +381,19 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  /* border: 1px solid rgba(148, 163, 184, 0.6); */
+}
+
+.hud-row {
+  position: absolute;
+  left: 0.85rem;
+  top: 0.85rem;
+  z-index: 7;
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
 }
 
 .metrics-card {
-  position: absolute;
-  z-index: 6;
   margin: 0;
   padding: 0.7rem 0.8rem;
   border-radius: 0.55rem;
@@ -356,6 +403,24 @@ onUnmounted(() => {
   min-width: min(280px, calc(100% - 2rem));
   max-width: min(320px, calc(100% - 2rem));
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+}
+
+.copy-card {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+  color: #000000;
+  min-width: min(360px, calc(100vw - 2rem));
+  max-width: min(440px, calc(100vw - 2rem));
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+}
+
+.copy-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
 }
 
 .year-text {
@@ -387,6 +452,52 @@ onUnmounted(() => {
   margin-top: 0.4rem;
 }
 
+.callout-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.region-callout {
+  position: absolute;
+  width: 16vmin;
+  min-width: 120px;
+  max-width: 210px;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  transition: opacity 520ms ease;
+}
+
+.north-callout {
+  left: 47%;
+  top: 29%;
+}
+
+.baja-callout {
+  left: 26%;
+  top: 44%;
+}
+
+.callout-circle {
+  width: 100%;
+  height: 100%;
+  border: 4px solid rgba(220, 38, 38, 0.88);
+  border-radius: 999px;
+}
+
+.callout-label {
+  position: absolute;
+  right: -12%;
+  top: -10%;
+  margin: 0;
+  color: rgba(185, 28, 28, 0.96);
+  font-size: clamp(0.8rem, 1.1vw, 1.05rem);
+  font-weight: 700;
+  transform: rotate(20deg);
+  text-transform: lowercase;
+}
+
 .token-warning {
   position: absolute;
   left: 1rem;
@@ -400,5 +511,18 @@ onUnmounted(() => {
   background: rgba(254, 242, 242, 0.92);
   color: #991b1b;
   font-size: 0.8rem;
+}
+
+@media (max-width: 1100px) {
+  .hud-row {
+    max-width: calc(100% - 1.7rem);
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .copy-card {
+    min-width: min(300px, calc(100vw - 2rem));
+    max-width: min(420px, calc(100vw - 2rem));
+  }
 }
 </style>
