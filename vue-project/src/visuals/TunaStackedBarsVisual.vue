@@ -3,7 +3,7 @@ import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleBand, scaleLinear } from 'd3-scale'
 import { select } from 'd3-selection'
 import { transition } from 'd3-transition'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_grouped.csv?raw'
 
 const props = defineProps({
@@ -11,7 +11,10 @@ const props = defineProps({
 })
 
 const hostRef = ref(null)
+const wrapRef = ref(null)
 const YEAR_START = 1965
+const BLUEFIN_SPECIES = ['BFT', 'PBF', 'SBF']
+const STAGGER_MS = 52
 
 const SPECIES_META = [
   { code: 'PBF', label: 'Pacific bluefin' },
@@ -60,7 +63,19 @@ const STAGES = [
   },
 ]
 
-const stageConfig = computed(() => STAGES[Math.min(Math.max(props.activeStep, 0), STAGES.length - 1)])
+const LAST_STAGE_INDEX = STAGES.length - 1
+
+/** Scroll step 0 = intro copy only (empty chart). Step 1+ maps to STAGES[step - 1], clamped. */
+function scrollStepToChartStage(scrollStep) {
+  if (scrollStep <= 0) return -1
+  return Math.min(scrollStep - 1, LAST_STAGE_INDEX)
+}
+
+const stageConfig = computed(() => {
+  const idx = scrollStepToChartStage(props.activeStep)
+  if (idx < 0) return { species: [], yearRange: undefined, annotations: undefined }
+  return STAGES[idx]
+})
 const stageSpecies = computed(() => stageConfig.value.species)
 
 const legendSpecies = computed(() =>
@@ -72,6 +87,12 @@ function easeCubicInOut(t) {
 }
 
 const prevActiveStep = ref(null)
+const introPrimed = ref(false)
+const pendingIntroStagger = ref(false)
+const prevRevealedYears = ref([])
+const lastDrawDims = ref({ w: 0, h: 0 })
+
+let io
 
 function parseCsv(text) {
   const lines = text.trim().split(/\r?\n/)
@@ -224,22 +245,80 @@ function drawChart() {
   svg.attr('width', width).attr('height', height)
 
   const { years, bySy } = matrixRef
-  const stage = stageConfig.value
+  const stageIdx = scrollStepToChartStage(props.activeStep)
+  const stage =
+    stageIdx >= 0 ? STAGES[stageIdx] : { species: [], yearRange: undefined, annotations: undefined }
   const order = stage.species
-  const stageYears = yearsWithinRange(years, stage.yearRange)
+  const stageYears = stageIdx >= 0 ? yearsWithinRange(years, stage.yearRange) : []
+  const isFinal = stageIdx === LAST_STAGE_INDEX
 
-  const stackMax = maxStackForOrder(stageYears, order, bySy)
-  const yMax = yDomainMax(stackMax)
+  const bluefinMaxRaw = maxStackForOrder(years, BLUEFIN_SPECIES, bySy)
+  const fullMaxRaw = maxStackForOrder(years, STAGES[LAST_STAGE_INDEX].species, bySy)
+  const yMax = yDomainMax(isFinal ? fullMaxRaw : bluefinMaxRaw)
 
   const xScale = scaleBand().domain(years.map(String)).range([0, innerW]).padding(0.15)
   const yScale = scaleLinear().domain([0, yMax]).range([innerH, 0])
 
-  const segs = segmentGeometry(stageYears, order, bySy)
+  const segs = stageIdx >= 0 ? segmentGeometry(stageYears, order, bySy) : []
 
-  const stepChanged = prevActiveStep.value !== null && prevActiveStep.value !== props.activeStep
-  prevActiveStep.value = props.activeStep
+  const priorStep = prevActiveStep.value
+  const priorStageIdx = priorStep !== null ? scrollStepToChartStage(priorStep) : -1
+  const priorIsFinal = priorStageIdx === LAST_STAGE_INDEX
+  const stepChanged = priorStep !== null && priorStep !== props.activeStep
+  const stepForward = stepChanged && props.activeStep > priorStep
+  const stepBackward = stepChanged && props.activeStep < priorStep
+
+  const resizeOnly =
+    introPrimed.value &&
+    !stepChanged &&
+    lastDrawDims.value.w === width &&
+    lastDrawDims.value.h === height
+
+  const shouldUseIntroPending = pendingIntroStagger.value
+  const useStagger =
+    introPrimed.value &&
+    stageIdx >= 0 &&
+    !isFinal &&
+    !resizeOnly &&
+    (stepForward || shouldUseIntroPending)
+  if (pendingIntroStagger.value && stageIdx >= 0) pendingIntroStagger.value = false
+
+  const useReverseStagger =
+    introPrimed.value &&
+    !resizeOnly &&
+    stepBackward &&
+    priorStageIdx >= 0 &&
+    !priorIsFinal &&
+    (stageIdx < 0 || stageIdx < LAST_STAGE_INDEX)
+
+  const priorStageConfig = priorStageIdx >= 0 ? STAGES[priorStageIdx] : null
+  const priorStageYears =
+    priorStageIdx >= 0 ? yearsWithinRange(years, priorStageConfig.yearRange) : []
+  const removedYearsSortedDesc = useReverseStagger
+    ? priorStageYears.filter((y) => !stageYears.includes(y)).sort((a, b) => b - a)
+    : []
+  const exitStaggerIdx = new Map(removedYearsSortedDesc.map((y, i) => [y, i]))
+
+  const revealed = new Set(prevRevealedYears.value)
+  const newYearsSorted = stageYears.filter((y) => !revealed.has(y)).sort((a, b) => a - b)
+  const staggerIdx = new Map(newYearsSorted.map((y, i) => [y, i]))
+
   const barDuration = stepChanged ? 1200 : 320
   const t = transition().duration(barDuration).ease(easeCubicInOut)
+
+  const baselineY = yScale(0)
+
+  function barDelay(d) {
+    if (!useStagger || isFinal) return 0
+    const i = staggerIdx.get(d.year)
+    return i === undefined ? 0 : i * STAGGER_MS
+  }
+
+  function exitDelay(d) {
+    if (!useReverseStagger) return 0
+    const i = exitStaggerIdx.get(d.year)
+    return i === undefined ? 0 : i * STAGGER_MS
+  }
 
   let gMain = svg.select('g.main')
   if (gMain.empty()) {
@@ -262,12 +341,15 @@ function drawChart() {
   gx.selectAll('text').attr('font-size', 10).attr('transform', 'rotate(-35)').style('text-anchor', 'end')
 
   const gy = gMain.select('g.y-axis')
-  gy.call(
-    axisLeft(yScale)
-      .ticks(6)
-      .tickFormat((d) => Number(d).toLocaleString(undefined, { maximumFractionDigits: 0 }))
-      .tickSizeOuter(0),
-  )
+  const yAxisFn = axisLeft(yScale)
+    .ticks(6)
+    .tickFormat((d) => Number(d).toLocaleString(undefined, { maximumFractionDigits: 0 }))
+    .tickSizeOuter(0)
+  if (introPrimed.value && stepChanged) {
+    gy.transition(t).call(yAxisFn)
+  } else {
+    gy.call(yAxisFn)
+  }
   gy.selectAll('.tick text').attr('font-size', 10)
 
   gMain
@@ -282,6 +364,16 @@ function drawChart() {
   const gBars = gMain.select('g.bars')
   const gHoverTargets = gMain.select('g.hover-targets')
   const gAnnotations = gMain.select('g.annotations')
+
+  if (!introPrimed.value) {
+    gBars.selectAll('rect').interrupt().remove()
+    gHoverTargets.selectAll('rect').interrupt().remove()
+    gAnnotations.selectAll('*').interrupt().remove()
+    gHoverGuides.selectAll('line.hover-line').style('opacity', 0)
+    gHoverGuides.selectAll('text.hover-line-label').style('opacity', 0)
+    return
+  }
+
   gBars.selectAll('rect').interrupt()
 
   const segKey = (d) => `${d.year}-${d.species}`
@@ -314,6 +406,7 @@ function drawChart() {
   }
 
   function updateHoverState(year) {
+    if (!order.length) return
     const x = yearCenterX(xScale, year)
     if (x == null) return
     const total = totalForYear(year, order, bySy)
@@ -335,25 +428,26 @@ function drawChart() {
           .attr('class', 'bar-segment')
           .attr('x', (d) => xScale(String(d.year)))
           .attr('width', xScale.bandwidth())
-          .attr('y', 0)
+          .attr('y', (d) =>
+            !isFinal && useStagger && staggerIdx.has(d.year) ? baselineY : 0,
+          )
           .attr('height', 0)
           .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
           .attr('opacity', 0),
       (update) => update.attr('class', 'bar-segment'),
       (exit) =>
-        exit.each(function () {
-          const elSel = select(this)
-          const yTop = Number(elSel.attr('y'))
-          const h = Number(elSel.attr('height')) || 0
-          elSel
+        exit.each(function (d) {
+          select(this)
             .transition(t)
-            .attr('y', yTop + h)
+            .delay(exitDelay(d))
+            .attr('y', baselineY)
             .attr('height', 0)
             .attr('opacity', 0)
             .remove()
         }),
     )
     .transition(t)
+    .delay((d) => barDelay(d))
     .attr('x', (d) => xScale(String(d.year)))
     .attr('width', xScale.bandwidth())
     .attr('y', (d) => yScale(d.y1))
@@ -435,6 +529,10 @@ function drawChart() {
     .attr('font-weight', 600)
     .attr('opacity', 0.95)
     .text((d) => d.label)
+
+  prevRevealedYears.value = stageIdx >= 0 ? [...stageYears] : []
+  prevActiveStep.value = props.activeStep
+  lastDrawDims.value = { w: width, h: height }
 }
 
 let ro
@@ -450,6 +548,28 @@ onMounted(() => {
 
   ro = new ResizeObserver(() => drawChart())
   ro.observe(el)
+
+  nextTick(() => {
+    const wrap = wrapRef.value
+    if (!wrap || typeof IntersectionObserver === 'undefined') {
+      introPrimed.value = true
+      pendingIntroStagger.value = true
+      drawChart()
+      return
+    }
+    io = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0]
+        if (!e?.isIntersecting || e.intersectionRatio < 1) return
+        if (introPrimed.value) return
+        introPrimed.value = true
+        pendingIntroStagger.value = true
+        drawChart()
+      },
+      { threshold: 1 },
+    )
+    io.observe(wrap)
+  })
 })
 
 watch(
@@ -459,13 +579,15 @@ watch(
 
 onUnmounted(() => {
   ro?.disconnect()
+  io?.disconnect()
+  io = undefined
   svg?.remove()
   svg = null
 })
 </script>
 
 <template>
-  <div class="stacked-wrap">
+  <div ref="wrapRef" class="stacked-wrap">
     <div ref="hostRef" class="d3-host" />
     <aside class="legend" aria-label="Species in chart">
       <TransitionGroup name="legend" tag="ul" class="legend-list">

@@ -4,79 +4,160 @@ import { axisBottom, axisLeft } from 'd3-axis'
 import { csvParse } from 'd3-dsv'
 import { line } from 'd3-shape'
 import { scaleLinear } from 'd3-scale'
-import { interpolatePuBu } from 'd3-scale-chromatic'
 import { pointer, select } from 'd3-selection'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import csvRaw from '../data/toyosu_tuna_04-23.csv?raw'
+import csvRaw from '../data/toyosu_avg_all.csv?raw'
 
+const wrapRef = ref(null)
 const hostRef = ref(null)
 const tooltipRef = ref(null)
-const yearsRef = ref([])
+const seriesRef = ref([])
+const lockedSeriesId = ref(null)
 
 let svg
 let resizeObserver
-let seriesRows = []
+let chartState = null
 
 const YEAR_START = 2004
 const YEAR_END = 2023
-const PRICE_CAP_YEN = 16000
-const SEAFOOD_AVERAGE_PRICE_YEN = 1222
-const MIN_YEAR_OPACITY = 0.18
-const MAX_YEAR_OPACITY = 1
+const inactiveStrokeOpacity = ref(0.34)
+const nonBluefinBaseOpacity = ref(0.34)
+const BLUEFIN_ATLANTIC_COLOR = '#17203D'
+const NON_BLUEFIN_PALETTE = [
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#22c55e',
+  '#06b6d4',
+  '#0ea5e9',
+  '#3b82f6',
+  '#8b5cf6',
+  '#d946ef',
+  '#ec4899',
+  '#14b8a6',
+  '#84cc16',
+]
 
-const orderedYears = computed(() => yearsRef.value)
+const BLUEFIN_SERIES_CONFIG = [
+  {
+    id: 'bluefin_mid',
+    label: 'Bluefin tuna - mid',
+    itemName: 'Bluefin tuna',
+    metric: 'price_mid',
+    color: BLUEFIN_ATLANTIC_COLOR,
+    strokeWidth: 4,
+  },
+  {
+    id: 'bluefin_low',
+    label: 'Bluefin tuna - low',
+    itemName: 'Bluefin tuna',
+    metric: 'price_low',
+    color: BLUEFIN_ATLANTIC_COLOR,
+    strokeWidth: 4,
+    dasharray: '5 4',
+    defaultOpacity: 0.75,
+  },
+]
+
+const LEGEND_SERIES_IDS = new Set(['bluefin_mid', 'bigeye_mid'])
+const orderedSeries = computed(() => seriesRef.value)
+const legendSeries = computed(() => orderedSeries.value.filter((series) => LEGEND_SERIES_IDS.has(series.id)))
 
 function parseData() {
   const rows = csvParse(csvRaw, (d) => ({
     year: Number(d.year),
-    month: Number(d.month),
-    weekOfMonth: Number(d.week),
-    weekNumber: Number(d.week_number),
+    itemName: d.item_en?.trim(),
+    priceHigh: Number(d.price_high),
     priceMid: Number(d.price_mid),
-  }))
-    .filter(
-      (d) =>
-        Number.isFinite(d.year) &&
-        Number.isFinite(d.month) &&
-        Number.isFinite(d.weekOfMonth) &&
-        Number.isFinite(d.weekNumber) &&
-        Number.isFinite(d.priceMid),
-    )
-    .filter((d) => d.year >= YEAR_START && d.year <= YEAR_END)
-    .filter((d) => d.priceMid <= PRICE_CAP_YEN)
+    priceLow: Number(d.price_low),
+  })).filter(
+    (d) =>
+      Number.isFinite(d.year) &&
+      Number.isFinite(d.priceHigh) &&
+      Number.isFinite(d.priceMid) &&
+      Number.isFinite(d.priceLow) &&
+      d.itemName &&
+      d.year >= YEAR_START &&
+      d.year <= YEAR_END,
+  )
 
-  const grouped = new Map()
-  for (const row of rows) {
-    const bucket = grouped.get(row.year) || []
-    bucket.push(row)
-    grouped.set(row.year, bucket)
+  const bluefinSeries = BLUEFIN_SERIES_CONFIG.map((config) => ({
+    ...config,
+    points: rows
+      .filter((row) => row.itemName === config.itemName)
+      .sort((a, b) => a.year - b.year)
+      .map((row) => ({
+        year: row.year,
+        value:
+          config.metric === 'price_high'
+            ? row.priceHigh
+            : config.metric === 'price_low'
+              ? row.priceLow
+              : row.priceMid,
+      }))
+      .filter((point) => Number.isFinite(point.value) && point.value > 0),
+  })).filter((s) => s.points.length > 0)
+
+  const otherItems = Array.from(new Set(rows.map((row) => row.itemName))).sort((a, b) => a.localeCompare(b))
+  const otherMidSeries = otherItems
+    .filter((itemName) => itemName !== 'Bluefin tuna')
+    .map((itemName, index) => {
+      const isBigeye = itemName === 'Bigeye'
+      return {
+        id: isBigeye ? 'bigeye_mid' : `item_${itemName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_mid`,
+        label: `${itemName} - mid`,
+        itemName,
+        metric: 'price_mid',
+        color: isBigeye ? '#16a34a' : NON_BLUEFIN_PALETTE[index % NON_BLUEFIN_PALETTE.length],
+        strokeWidth: isBigeye ? 2.2 : 1.35,
+        defaultOpacity: isBigeye ? 0.52 : nonBluefinBaseOpacity.value,
+        points: rows
+          .filter((row) => row.itemName === itemName)
+          .sort((a, b) => a.year - b.year)
+          .map((row) => ({ year: row.year, value: row.priceMid }))
+          .filter((point) => Number.isFinite(point.value) && point.value > 0),
+      }
+    })
+    .filter((series) => series.points.length > 0)
+
+  const series = [...bluefinSeries, ...otherMidSeries]
+
+  const bluefinMidByYear = new Map(
+    rows
+      .filter((row) => row.itemName === 'Bluefin tuna' && row.priceMid > 0)
+      .map((row) => [row.year, row.priceMid]),
+  )
+
+  const years = Array.from(
+    new Set(series.flatMap((s) => s.points.map((p) => p.year))).values(),
+  ).sort((a, b) => a - b)
+
+  const allValues = series.flatMap((s) => s.points.map((p) => p.value))
+  const yMin = min(allValues) ?? 1
+  const yMax = max(allValues) ?? 1
+
+  seriesRef.value = series
+  chartState = {
+    series,
+    years,
+    allValues,
+    yMin,
+    yMax,
+    bluefinMidByYear,
   }
-
-  const years = Array.from(grouped.keys()).sort((a, b) => a - b)
-  seriesRows = years.map((year) => ({
-    year,
-    values: grouped
-      .get(year)
-      .sort((a, b) => a.month - b.month || a.weekOfMonth - b.weekOfMonth)
-      .slice(0, 52)
-      .map((d, i) => ({ ...d, weekInYear: i + 1 })),
-  }))
-  yearsRef.value = years
-
-  return { years }
 }
 
 function drawChart() {
   if (!hostRef.value || !svg) return
 
   parseData()
-  if (!seriesRows.length) return
+  if (!chartState || !chartState.series.length) return
 
   const host = hostRef.value
   const width = host.clientWidth || 860
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
-  const margin = { top: 28, right: 24, bottom: 46, left: 72 }
+  const margin = { top: 34, right: 24, bottom: 46, left: 72 }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
   if (innerWidth < 20 || innerHeight < 20) return
@@ -85,27 +166,42 @@ function drawChart() {
   svg.selectAll('*').remove()
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
-
-  const allValues = seriesRows.flatMap((d) => d.values.map((v) => v.priceMid))
-  const yMin = min(allValues) ?? 0
-  const yMax = max(allValues) ?? 1
-
-  const xScale = scaleLinear().domain([1, 52]).range([0, innerWidth])
-  const yScale = scaleLinear().domain([Math.max(0, yMin * 0.92), yMax * 1.06]).range([innerHeight, 0])
-
-  const colorScale = scaleLinear()
-    .domain([YEAR_START, YEAR_END])
-    .range([0.42, 0.96])
-    .clamp(true)
+  const yearMin = min(chartState.years) ?? YEAR_START
+  const yearMax = max(chartState.years) ?? YEAR_END
+  const xScale = scaleLinear().domain([yearMin, yearMax]).range([0, innerWidth])
+  const yScale = scaleLinear()
+    .domain([Math.max(0, chartState.yMin * 0.92), chartState.yMax * 1.08])
+    .range([innerHeight, 0])
 
   const lineGen = line()
-    .x((d) => xScale(d.weekInYear))
-    .y((d) => yScale(d.priceMid))
+    .x((d) => xScale(d.year))
+    .y((d) => yScale(d.value))
+
+  const hoverLine = g
+    .append('line')
+    .attr('class', 'hover-line')
+    .attr('x1', 0)
+    .attr('x2', 0)
+    .attr('y1', 0)
+    .attr('y2', innerHeight)
+    .style('opacity', 0)
+
+  const hoverLabel = g
+    .append('text')
+    .attr('class', 'hover-line-label')
+    .attr('x', 0)
+    .attr('y', -8)
+    .attr('text-anchor', 'middle')
+    .style('opacity', 0)
 
   g.append('g')
     .attr('class', 'axis axis-x')
     .attr('transform', `translate(0,${innerHeight})`)
-    .call(axisBottom(xScale).tickValues([1, 13, 26, 39, 52]).tickFormat((d) => `W${d}`))
+    .call(
+      axisBottom(xScale)
+        .tickValues(chartState.years)
+        .tickFormat((d) => `${Math.round(Number(d))}`),
+    )
 
   g.append('g')
     .attr('class', 'axis axis-y')
@@ -116,7 +212,7 @@ function drawChart() {
     .attr('x', innerWidth / 2)
     .attr('y', innerHeight + 38)
     .attr('text-anchor', 'middle')
-    .text('Week of Year')
+    .text('Year')
 
   g.append('text')
     .attr('class', 'axis-label')
@@ -124,121 +220,178 @@ function drawChart() {
     .attr('x', -innerHeight / 2)
     .attr('y', -54)
     .attr('text-anchor', 'middle')
-    .text('median price per kg of bluefin')
+    .text('Price per kg (JPY)')
 
-  const averagePriceY = yScale(SEAFOOD_AVERAGE_PRICE_YEN)
-  if (Number.isFinite(averagePriceY) && averagePriceY >= 0 && averagePriceY <= innerHeight) {
-    g.append('line')
-      .attr('class', 'average-price-line')
-      .attr('x1', 0)
-      .attr('x2', innerWidth)
-      .attr('y1', averagePriceY)
-      .attr('y2', averagePriceY)
-
-    g.append('text')
-      .attr('class', 'average-price-label')
-      .attr('x', innerWidth - 8)
-      .attr('y', averagePriceY - 6)
-      .attr('text-anchor', 'end')
-      .text('average price per kg of seafood product')
-  }
-
-  const yearGroups = g
-    .selectAll('.year-group')
-    .data(seriesRows, (d) => d.year)
+  const seriesGroups = g
+    .selectAll('.series-group')
+    .data(chartState.series, (d) => d.id)
     .join('g')
-    .attr('class', 'year-group')
-    .attr('data-year', (d) => d.year)
+    .attr('class', 'series-group')
+    .attr('data-series-id', (d) => d.id)
 
-  yearGroups
+  seriesGroups
     .append('path')
-    .attr('class', 'year-line')
-    .attr('data-year', (d) => d.year)
-    .attr('d', (d) => lineGen(d.values))
-    .attr('stroke', (d) => interpolatePuBu(colorScale(d.year)))
-    .attr('stroke-opacity', (d) => yearOpacity(d.year))
+    .attr('class', 'series-line')
+    .attr('data-series-id', (d) => d.id)
+    .attr('d', (d) => lineGen(d.points))
+    .attr('stroke', (d) => d.color)
+    .attr('stroke-dasharray', (d) => d.dasharray || null)
     .attr('fill', 'none')
-    .attr('stroke-width', 2)
+    .attr('stroke-width', (d) => d.strokeWidth || 2)
+    .attr('stroke-opacity', (d) => d.defaultOpacity ?? 1)
 
   const tooltipEl = tooltipRef.value
-  yearGroups
+  seriesGroups
     .append('path')
-    .attr('class', 'year-line-overlay')
-    .attr('data-year', (d) => d.year)
-    .attr('d', (d) => lineGen(d.values))
+    .attr('class', 'series-line-overlay')
+    .attr('data-series-overlay', 'true')
+    .attr('data-series-id', (d) => d.id)
+    .attr('d', (d) => lineGen(d.points))
     .attr('stroke', 'transparent')
     .attr('stroke-width', 12)
     .attr('fill', 'none')
     .attr('pointer-events', 'stroke')
     .on('mouseenter', function (event, d) {
-      setActiveYear(d.year)
+      if (!lockedSeriesId.value) setActiveSeries(d.id)
+      updateHoverLine(event)
       if (!tooltipEl) return
       tooltipEl.style.opacity = '1'
-      tooltipEl.textContent = `${d.year}`
+      tooltipEl.textContent = d.label
       tooltipEl.style.left = `${event.offsetX + 12}px`
       tooltipEl.style.top = `${event.offsetY + 12}px`
     })
     .on('mousemove', function (event, d) {
-      setActiveYear(d.year)
+      if (!lockedSeriesId.value) setActiveSeries(d.id)
+      updateHoverLine(event)
       if (!tooltipEl) return
       const [x] = pointer(event, g.node())
-      const week = Math.round(xScale.invert(x))
-      const point = d.values[Math.max(0, Math.min(51, week - 1))]
-      tooltipEl.textContent = `${d.year} · W${week} · ¥${Math.round(point?.priceMid || 0).toLocaleString()}`
+      const year = Math.round(xScale.invert(x))
+      const point = nearestPointByYear(d.points, year)
+      tooltipEl.textContent = `${point?.year ?? year} · ${d.label} · ¥${Math.round(
+        point?.value || 0,
+      ).toLocaleString()}`
       tooltipEl.style.left = `${event.offsetX + 12}px`
       tooltipEl.style.top = `${event.offsetY + 12}px`
     })
     .on('mouseleave', () => {
-      clearActiveYear()
+      if (!lockedSeriesId.value) clearActiveSeries()
       if (!tooltipEl) return
       tooltipEl.style.opacity = '0'
     })
+    .on('click', function (event, d) {
+      event.stopPropagation()
+      lockSeries(d.id)
+    })
+
+  const interactionRect = g
+    .append('rect')
+    .attr('class', 'interaction-overlay')
+    .attr('x', 0)
+    .attr('y', 0)
+    .attr('width', innerWidth)
+    .attr('height', innerHeight)
+    .attr('fill', 'transparent')
+    .on('mouseenter', function (event) {
+      updateHoverLine(event)
+    })
+    .on('mousemove', function (event) {
+      updateHoverLine(event)
+    })
+    .on('mouseleave', () => {
+      hoverLine.style('opacity', 0)
+      hoverLabel.style('opacity', 0)
+    })
+  interactionRect.lower()
+
+  function updateHoverLine(event) {
+    const [mouseX] = pointer(event, g.node())
+    const clampedX = Math.max(0, Math.min(innerWidth, mouseX))
+    const year = Math.min(yearMax, Math.max(yearMin, Math.round(xScale.invert(clampedX))))
+    const xPos = xScale(year)
+    hoverLine.attr('x1', xPos).attr('x2', xPos).style('opacity', 1)
+    const bluefinMid = chartState.bluefinMidByYear.get(year)
+    hoverLabel
+      .attr('x', xPos)
+      .text(`¥${Math.round(bluefinMid || 0).toLocaleString()}`)
+      .style('opacity', Number.isFinite(bluefinMid) ? 1 : 0)
+  }
+
+  hoverLine.raise()
+  hoverLabel.raise()
+
+  if (lockedSeriesId.value) {
+    setActiveSeries(lockedSeriesId.value)
+  } else {
+    clearActiveSeries()
+  }
 }
 
-function setActiveYear(year) {
+function nearestPointByYear(points, year) {
+  if (!points.length) return null
+  let nearest = points[0]
+  for (const point of points) {
+    if (Math.abs(point.year - year) < Math.abs(nearest.year - year)) nearest = point
+  }
+  return nearest
+}
+
+function setActiveSeries(seriesId) {
   if (!svg) return
   const root = select(svg.node().parentNode)
+  const targetSeries = chartState?.series?.find((s) => s.id === seriesId)
+  const targetItemName = targetSeries?.itemName
   root
-    .selectAll('.year-line')
-    .classed('is-active', (d) => d.year === year)
-    .classed('is-inactive', (d) => d.year !== year)
-    .attr('stroke-opacity', (d) => (d.year === year ? 1 : 0.14))
+    .selectAll('.series-line')
+    .classed('is-active', (d) => (seriesId === 'bluefin_mid' ? d.itemName === 'Bluefin tuna' : d.id === seriesId))
+    .classed(
+      'is-inactive',
+      (d) => (seriesId === 'bluefin_mid' ? d.itemName !== 'Bluefin tuna' : d.id !== seriesId),
+    )
+    .attr('stroke-opacity', (d) => {
+      if (seriesId === 'bluefin_mid')
+        return d.itemName === 'Bluefin tuna' ? 1 : inactiveStrokeOpacity.value
+      return d.id === seriesId || d.itemName === targetItemName ? 1 : inactiveStrokeOpacity.value
+    })
   root
     .selectAll('.legend-item')
-    .classed('is-active', (_d, i, nodes) => Number(nodes[i].getAttribute('data-year')) === year)
-    .classed('is-inactive', (_d, i, nodes) => Number(nodes[i].getAttribute('data-year')) !== year)
+    .classed('is-active', (_d, i, nodes) => nodes[i].getAttribute('data-series-id') === seriesId)
+    .classed('is-inactive', (_d, i, nodes) => nodes[i].getAttribute('data-series-id') !== seriesId)
 }
 
-function clearActiveYear() {
+function clearActiveSeries() {
   if (!svg) return
   const root = select(svg.node().parentNode)
   root
-    .selectAll('.year-line')
+    .selectAll('.series-line')
     .classed('is-active', false)
     .classed('is-inactive', false)
-    .attr('stroke-opacity', (d) => yearOpacity(d.year))
+    .attr('stroke-opacity', (d) => d.defaultOpacity ?? 1)
   root.selectAll('.legend-item').classed('is-active', false).classed('is-inactive', false)
 }
 
-function yearColor(year) {
-  return blueWithOpacity(year, yearOpacity(year))
+function lockSeries(seriesId) {
+  lockedSeriesId.value = seriesId
+  setActiveSeries(seriesId)
 }
 
-function yearOpacity(year) {
-  const opacityScale = scaleLinear()
-    .domain([YEAR_START, YEAR_END])
-    .range([MIN_YEAR_OPACITY, MAX_YEAR_OPACITY])
-    .clamp(true)
-  return opacityScale(year)
+function onLegendClick(seriesId, event) {
+  event.stopPropagation()
+  lockSeries(seriesId)
 }
 
-function blueWithOpacity(year, opacity) {
-  const shadeScale = scaleLinear()
-    .domain([YEAR_START, YEAR_END])
-    .range([0.42, 0.96])
-    .clamp(true)
-  const rgb = interpolatePuBu(shadeScale(year))
-  return rgb.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`)
+function clearLockedSeries() {
+  if (!lockedSeriesId.value) return
+  lockedSeriesId.value = null
+  clearActiveSeries()
+}
+
+function onDocumentPointerDown(event) {
+  const wrap = wrapRef.value
+  if (!wrap || !lockedSeriesId.value) return
+  if (wrap.contains(event.target) && event.target.closest('.legend-item, [data-series-overlay="true"]')) {
+    return
+  }
+  clearLockedSeries()
 }
 
 onMounted(() => {
@@ -250,35 +403,44 @@ onMounted(() => {
 
   resizeObserver = new ResizeObserver(() => drawChart())
   resizeObserver.observe(host)
+  document.addEventListener('pointerdown', onDocumentPointerDown)
 })
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   svg?.remove()
   svg = null
 })
 </script>
 
 <template>
-  <div class="linechart-wrap">
-    <div ref="hostRef" class="d3-host" />
-    <div ref="tooltipRef" class="tooltip" />
-    <aside class="legend" aria-label="Year lines in chart">
+  <div ref="wrapRef" class="linechart-wrap">
+    <aside class="legend" aria-label="Price series in chart">
       <ul class="legend-list">
         <li
-          v-for="year in orderedYears"
-          :key="year"
+          v-for="series in legendSeries"
+          :key="series.id"
           class="legend-item"
-          :data-year="year"
-          @mouseenter="setActiveYear(year)"
-          @mouseleave="clearActiveYear()"
+          :data-series-id="series.id"
+          @mouseenter="!lockedSeriesId && setActiveSeries(series.id)"
+          @mouseleave="!lockedSeriesId && clearActiveSeries()"
+          @click="onLegendClick(series.id, $event)"
         >
-          <span class="swatch" :style="{ background: yearColor(year) }" />
-          <span class="legend-label">{{ year }}</span>
+          <span
+            class="swatch"
+            :style="{
+              '--swatch-color': series.color,
+              '--swatch-dasharray': series.dasharray || 'none',
+            }"
+          />
+          <span class="legend-label">{{ series.label }}</span>
         </li>
       </ul>
     </aside>
+    <div ref="hostRef" class="d3-host" />
+    <div ref="tooltipRef" class="tooltip" />
   </div>
 </template>
 
@@ -318,46 +480,46 @@ onUnmounted(() => {
   font-size: 0.74rem;
 }
 
-.linechart-wrap :deep(.year-line) {
+.linechart-wrap :deep(.series-line) {
   opacity: 1;
   transition: opacity 0.18s ease, stroke-width 0.18s ease;
 }
 
-.linechart-wrap :deep(.year-line.is-active) {
+.linechart-wrap :deep(.series-line.is-active) {
   opacity: 1;
-  stroke-width: 3;
+  stroke-width: 3.2;
 }
 
-.linechart-wrap :deep(.year-line.is-inactive) {
-  opacity: 0.14;
+.linechart-wrap :deep(.series-line.is-inactive) {
+  opacity: 1;
 }
 
-.linechart-wrap :deep(.year-line-overlay) {
+.linechart-wrap :deep(.series-line-overlay) {
   cursor: pointer;
 }
 
-.linechart-wrap :deep(.average-price-line) {
-  stroke: #dc2626;
-  stroke-width: 1.5;
-  stroke-dasharray: 6 4;
-  opacity: 0.9;
+.linechart-wrap :deep(.hover-line) {
+  stroke: #334155;
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
   pointer-events: none;
 }
 
-.linechart-wrap :deep(.average-price-label) {
-  fill: #dc2626;
-  font-size: 0.68rem;
-  font-weight: 700;
+.linechart-wrap :deep(.hover-line-label) {
+  fill: #0f172a;
+  font-size: 0.7rem;
+  font-weight: 600;
   pointer-events: none;
 }
 
 .legend {
   position: absolute;
-  top: 0.45rem;
+  top: 0.25rem;
   left: 50%;
   transform: translateX(-50%);
-  max-height: calc(100% - 0.9rem);
-  overflow: auto;
+  width: calc(100% - 1rem);
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 0;
   border-radius: 0;
   background: transparent;
@@ -368,13 +530,15 @@ onUnmounted(() => {
 .legend-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.1rem 0.15rem;
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
-  gap: 0.2rem 0.5rem;
+  gap: 0.2rem 0.75rem;
+  width: max-content;
+  min-width: 100%;
 }
 
 .legend-item {
@@ -398,9 +562,13 @@ onUnmounted(() => {
 }
 
 .swatch {
-  width: 0.62rem;
-  height: 0.62rem;
+  width: 1rem;
+  height: 0;
+  border-top: 3px solid var(--swatch-color);
+  border-top-style: solid;
   border-radius: 2px;
+  background: transparent;
+  border-image: none;
   flex-shrink: 0;
 }
 
@@ -425,9 +593,7 @@ onUnmounted(() => {
   }
 
   .legend {
-    max-height: 45%;
-    max-width: calc(100% - 1rem);
-    top: 0.35rem;
+    top: 0.2rem;
   }
 }
 </style>

@@ -6,6 +6,11 @@ import TunaStackedBarsVisual from '../visuals/TunaStackedBarsVisual.vue'
 
 const steps = [
   {
+    id: 'chart-intro',
+    title: 'Here is the bar chart.',
+    text: 'Each column is a year of global tuna catch. Scroll to watch the series build.',
+  },
+  {
     id: 'hf1',
     title: '...and the fishing world bent to its will.',
     text: "As sushi's popularity grew, so did the demand for bluefin tuna. In the 1980s, it became possible and profitable to ship Atlantic bluefin tuna to Japan. By 2007, over 60,000 tonnes of Atlantic bluefin tuna were caught yearly.",
@@ -40,20 +45,32 @@ const steps = [
 
 <template>
   <StorySection id="stacked-bars" height="overscroll" width="full">
-    <PinnedScrollSection :steps="steps">
-      <template #graphic="graphicProps">
-        <TunaStackedBarsVisual :active-step="graphicProps.activeStep" />
-      </template>
-      <template #step="{ step }">
-        <CopyBlock :title="step.title">
-          <p style="white-space: pre-line">{{ step.text }}</p>
-        </CopyBlock>
-      </template>
-    </PinnedScrollSection>
+    <div class="stacked-bars-scrolly">
+      <div class="stacked-bars-lead" aria-hidden="true" />
+      <PinnedScrollSection :steps="steps" :scroll-offset="0.72">
+        <template #graphic="graphicProps">
+          <TunaStackedBarsVisual :active-step="graphicProps.activeStep" />
+        </template>
+        <template #step="{ step }">
+          <CopyBlock :title="step.title">
+            <p style="white-space: pre-line">{{ step.text }}</p>
+          </CopyBlock>
+        </template>
+      </PinnedScrollSection>
+    </div>
   </StorySection>
 </template>
 
 <style scoped>
+.stacked-bars-scrolly {
+  width: 100%;
+}
+
+.stacked-bars-lead {
+  min-height: clamp(5rem, 26vh, 16rem);
+  pointer-events: none;
+}
+
 #stacked-bars :deep(.sticky-graphic) {
   background: var(--color-section-surface);
   display: flex;

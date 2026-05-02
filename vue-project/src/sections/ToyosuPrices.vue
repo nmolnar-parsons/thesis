@@ -11,7 +11,7 @@ import ToyosuPricesLineVisual from '../visuals/ToyosuPricesLineVisual.vue'
       <div class="story-copy story-copy--top toyosu-copy-top">
         <CopyBlock title="Tsukiji and Toyosu and Where Your Fish Comes From">
           <p>
-            Weekly Toyosu market prices show how bluefin valuation shifts across seasons and years.
+            Annual Toyosu market prices show how bluefin valuation shifts over two decades.
           </p>
         </CopyBlock>
       </div>
