@@ -1,20 +1,32 @@
 <script setup>
-import CopyBlock from '../components/layout/CopyBlock.vue'
 import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import MapSectionVisual from '../visuals/MapSectionVisual.vue'
 
+/** Scroll steps drive `activeStep` only; all copy lives on the map HUD in MapSectionVisual. */
 const steps = [
+  // 0–4: year animates 1965 → 2023 (global view)
   { id: 'm1', title: '', text: '' },
   { id: 'm2', title: '', text: '' },
   { id: 'm3', title: '', text: '' },
   { id: 'm4', title: '', text: '' },
   { id: 'm5', title: '', text: '' },
+  // 5–8: global view linger (pacing)
   { id: 'm6', title: '', text: '' },
   { id: 'm7', title: '', text: '' },
   { id: 'm8', title: '', text: '' },
   { id: 'm9', title: '', text: '' },
+  // 9–11: Mediterranean (before-annotation, before-annotation, annotation + circle)
   { id: 'm10', title: '', text: '' },
+  { id: 'm11', title: '', text: '' },
+  { id: 'm12', title: '', text: '' },
+  // 12–13: Baja (Baja 1 no circle, Baja 2 + circle)
+  { id: 'm13', title: '', text: '' },
+  { id: 'm14', title: '', text: '' },
+  // 14–16: return to global + end padding (m17 = extra beat after m16)
+  { id: 'm15', title: '', text: '' },
+  { id: 'm16', title: '', text: '' },
+  { id: 'm17', title: '', text: '' },
 ]
 </script>
 
@@ -28,10 +40,9 @@ const steps = [
           :step-count="steps.length"
         />
       </template>
-      <template #step="{ step }">
-        <CopyBlock v-if="step.title || step.text" eyebrow="" :title="step.title">
-          <p>{{ step.text }}</p>
-        </CopyBlock>
+      <template #step>
+        <!-- Non-empty slot suppresses PinnedScrollSection default .step-card fallback. -->
+        <span class="map-step-slot" aria-hidden="true" />
       </template>
     </PinnedScrollSection>
   </StorySection>
@@ -47,6 +58,32 @@ const steps = [
   padding-top: 90vh;
   /* Keep map pinned until the final step reaches the top. */
   padding-bottom: 90vh;
+}
+
+#map :deep(.scroll-step) {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+#map :deep(.scroll-step.active) {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Default slot fallback .step-card uses PinnedScrollSection scoped styles — hide entirely here. */
+#map :deep(.step-card) {
+  display: none !important;
+}
+
+#map :deep(.map-step-slot) {
+  display: block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 @media (max-width: 900px) {

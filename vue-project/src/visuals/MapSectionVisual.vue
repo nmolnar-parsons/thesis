@@ -1,32 +1,77 @@
 <script setup>
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { schemePuBu } from 'd3-scale-chromatic'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-// import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch.geojson?url'
-import tunaCatchDataUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
-import tunaCatchDataRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
-
+import tunaCatchData5degUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
+import tunaCatchData5degRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
+/** 1° grid (~28 MB): Mediterranean/Baja zoom only; URL for Mapbox + async HUD totals. */
+import tunaCatchData1degUrl from '../data/tuna_data/bluefin-cwp-grid-1deg-catch.geojson?url'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
-const DEFAULT_PROJECTION = 'naturalEarth'
+/** Mediterranean/Baja: replay years on the fine grid before advancing the story. */
+const REGION_YEAR_START = 2007
+const REGION_YEAR_END = 2023
+const DEFAULT_PROJECTION = 'winkelTripel'
 /** 250 kg per bluefin on average; convert head-count to metric tonnes. */
 const COUNT_TO_TONNE = 250 / 1000
-const PUBU_COLORS = schemePuBu[9]
+/** Lowest tier on catch scale (tonnes = 0): base “ocean” fill. */
+const CATCH_SCALE_ZERO_COLOR = '#13265f'
+/** Upper bounds for each ramp step (Mapbox `step`: default color applies below first stop). */
+const CATCH_TONNE_STEP_STOPS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000]
+/** Must align with stops: index 0 = below 25 t, then one color per interval. */
+const CATCH_COLOR_RAMP = [
+  CATCH_SCALE_ZERO_COLOR,
+  '#0b3c78',
+  '#0f558f',
+  '#1270a5',
+  '#1f88bb',
+  '#3ea2cf',
+  '#67b9de',
+  '#8dcdea',
+  '#b7def4',
+  '#deeffa',
+  '#ffffff',
+]
+
+function buildCatchTonnesStepExpression(valueExpr) {
+  const expr = ['step', valueExpr, CATCH_COLOR_RAMP[0]]
+  for (let i = 0; i < CATCH_TONNE_STEP_STOPS.length; i += 1) {
+    expr.push(CATCH_TONNE_STEP_STOPS[i], CATCH_COLOR_RAMP[i + 1])
+  }
+  return expr
+}
 const STEP_YEAR_FULLVIEW_END = 4
-const STEP_NORTH_ATLANTIC = 5
-const STEP_NORTH_ATLANTIC_LINGER = 6
-const STEP_BAJA = 7
-const STEP_BAJA_LINGER = 8
-const STEP_RETURN_FULL = 9
+/** Full global view, year already at 2023; extra scroll beats before regional zoom. */
+const STEP_FULLVIEW_LINGER_START = 5
+const STEP_FULLVIEW_LINGER_END = 8
+const STEP_MEDITERRANEAN = 9
+const STEP_MEDITERRANEAN_LINGER = 10
+/** Mediterranean camera + circle callout (two scroll beats before annotation). */
+const STEP_MEDITERRANEAN_ANNOTATION = 11
+const STEP_BAJA = 12
+/** Baja narrative 2 + circle callout (mirrors Mediterranean annotation step). */
+const STEP_BAJA_ANNOTATION = 13
+/** Global return + trailing scroll padding (indices 14–16 → m15–m17). */
+const STEP_RETURN_FULL = 14
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
   /** Scrollama progress through the current step, roughly 0–1. */
   stepProgress: { type: Number, default: 0 },
-  stepCount: { type: Number, default: 10 },
+  stepCount: { type: Number, default: 17 },
 })
+
+const MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION =
+  'Med Filler'
+const MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION =
+  'Med Filler Anno'
+const BAJA_NARRATIVE_BEFORE_ANNOTATION =
+  'Baja Filler'
+const BAJA_NARRATIVE_WITH_ANNOTATION =
+  'Baja Filler Anno'
+const LINGER_2023_FILLER = 'filler for 2023 linger'
+const DEFAULT_FILLER = 'default filler'
 
 const mapRef = ref(null)
 const mapReady = ref(false)
@@ -34,35 +79,67 @@ const tokenMissing = ref(false)
 let map = null
 let resizeObserver = null
 let activeCameraKey = ''
+/** Avoid redundant GeoJSON `setData` when resolution matches. */
+let lastLoadedTunaDataUrl = ''
 
-/** Years animate to 2023 before any regional zoom begins. */
-const yearTimelineT = computed(() => {
-  const spanSteps = Math.max(1, STEP_YEAR_FULLVIEW_END + 1)
-  const timelinePos = props.activeStep + props.stepProgress
-  if (timelinePos >= spanSteps) return 1
-  return timelinePos / spanSteps
-})
+function clamp01(v) {
+  return Math.min(1, Math.max(0, v))
+}
+
+const usingHighResData = computed(
+  () =>
+    (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep <= STEP_MEDITERRANEAN_ANNOTATION)
+    || (props.activeStep >= STEP_BAJA && props.activeStep <= STEP_BAJA_ANNOTATION),
+)
 
 const currentYear = computed(() => {
+  const step = props.activeStep
+  const prog = props.stepProgress
+  if (step >= STEP_MEDITERRANEAN && step <= STEP_MEDITERRANEAN_ANNOTATION) {
+    const nSteps = STEP_MEDITERRANEAN_ANNOTATION - STEP_MEDITERRANEAN + 1
+    const t = clamp01((step - STEP_MEDITERRANEAN + prog) / nSteps)
+    const spanY = REGION_YEAR_END - REGION_YEAR_START
+    return Math.min(REGION_YEAR_END, Math.max(REGION_YEAR_START, Math.round(REGION_YEAR_START + t * spanY)))
+  }
+  if (step >= STEP_BAJA && step <= STEP_BAJA_ANNOTATION) {
+    const nSteps = STEP_BAJA_ANNOTATION - STEP_BAJA + 1
+    const t = clamp01((step - STEP_BAJA + prog) / nSteps)
+    const spanY = REGION_YEAR_END - REGION_YEAR_START
+    return Math.min(REGION_YEAR_END, Math.max(REGION_YEAR_START, Math.round(REGION_YEAR_START + t * spanY)))
+  }
+  if (step >= STEP_RETURN_FULL || step > STEP_YEAR_FULLVIEW_END) {
+    return YEAR_END
+  }
+  const spanSteps = Math.max(1, STEP_YEAR_FULLVIEW_END + 1)
+  const timelinePos = step + prog
+  if (timelinePos >= spanSteps) return YEAR_END
+  const yearT = timelinePos / spanSteps
   const span = YEAR_END - YEAR_START
-  const y = YEAR_START + yearTimelineT.value * span
-  return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(y)))
+  return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(YEAR_START + yearT * span)))
 })
 
-function parseYearlyTotals() {
+function buildEmptyYearlyTonnesOnly() {
+  const yearly = new Map()
+  for (let y = YEAR_START; y <= YEAR_END; y += 1) {
+    yearly.set(y, { tonnes: 0 })
+  }
+  return yearly
+}
+
+function parseYearlyTotals5deg() {
   const empty = new Map()
   try {
-    const parsed = JSON.parse(tunaCatchDataRaw)
+    const parsed = JSON.parse(tunaCatchData5degRaw)
     const features = Array.isArray(parsed?.features) ? parsed.features : []
     const yearly = new Map()
     for (let y = YEAR_START; y <= YEAR_END; y += 1) {
       yearly.set(y, { count: 0, tonnes: 0 })
     }
     for (const feature of features) {
-      const props = feature?.properties || {}
+      const fp = feature?.properties || {}
       for (let y = YEAR_START; y <= YEAR_END; y += 1) {
-        const count = Number(props[`count_${y}`]) || 0
-        const tonnes = Number(props[`tonne_${y}`]) || 0
+        const count = Number(fp[`count_${y}`]) || 0
+        const tonnes = Number(fp[`tonne_${y}`]) || 0
         const entry = yearly.get(y)
         entry.count += count
         entry.tonnes += tonnes
@@ -70,37 +147,78 @@ function parseYearlyTotals() {
     }
     return yearly
   } catch (error) {
-    console.warn('MapSectionVisual: failed to parse yearly tuna totals.', error)
+    console.warn('MapSectionVisual: failed to parse 5deg yearly totals.', error)
     return empty
   }
 }
 
-const yearlyTotals = parseYearlyTotals()
+const yearlyTotals5deg = parseYearlyTotals5deg()
+
+/** 1° GeoJSON has `tonne_*` only; fish count for HUD is derived from tonnes. */
+function aggregateYearlyTonnesFromFeatures(features) {
+  const yearly = buildEmptyYearlyTonnesOnly()
+  if (!Array.isArray(features)) return yearly
+  for (const feature of features) {
+    const fp = feature?.properties || {}
+    for (let y = YEAR_START; y <= YEAR_END; y += 1) {
+      const raw = fp[`tonne_${y}`]
+      const tonnes = raw == null || raw === '' ? 0 : Number(raw) || 0
+      yearly.get(y).tonnes += tonnes
+    }
+  }
+  return yearly
+}
+
+const yearlyTotals1deg = ref(buildEmptyYearlyTonnesOnly())
+
+async function loadYearlyTotals1degFromUrl() {
+  try {
+    const res = await fetch(tunaCatchData1degUrl)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const parsed = await res.json()
+    yearlyTotals1deg.value = aggregateYearlyTonnesFromFeatures(parsed?.features)
+  } catch (error) {
+    console.warn('MapSectionVisual: failed to load 1deg yearly totals.', error)
+  }
+}
 
 const countRange = computed(() => {
-  const values = Array.from(yearlyTotals.values(), (d) => d.count)
+  if (usingHighResData.value) {
+    const values = Array.from(yearlyTotals1deg.value.values(), (d) => Math.round(d.tonnes / COUNT_TO_TONNE))
+    const min = Math.min(...values, 0)
+    const max = Math.max(...values, 1)
+    return { min, max }
+  }
+  const values = Array.from(yearlyTotals5deg.values(), (d) => d.count)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 1)
   return { min, max }
 })
 
 const tonnesRange = computed(() => {
-  const values = Array.from(yearlyTotals.values(), (d) => d.tonnes + d.count * COUNT_TO_TONNE)
+  if (usingHighResData.value) {
+    const values = Array.from(yearlyTotals1deg.value.values(), (d) => d.tonnes)
+    const min = Math.min(...values, 0)
+    const max = Math.max(...values, 1)
+    return { min, max }
+  }
+  const values = Array.from(yearlyTotals5deg.values(), (d) => d.tonnes + d.count * COUNT_TO_TONNE)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 1)
   return { min, max }
 })
 
 const currentYearTotals = computed(() => {
-  const entry = yearlyTotals.get(currentYear.value) || { count: 0, tonnes: 0 }
+  const cy = currentYear.value
+  if (usingHighResData.value) {
+    const tonnes = yearlyTotals1deg.value.get(cy)?.tonnes ?? 0
+    return { totalCount: Math.round(tonnes / COUNT_TO_TONNE), totalTonnes: tonnes }
+  }
+  const entry = yearlyTotals5deg.get(cy) || { count: 0, tonnes: 0 }
   const totalCount = entry.count
   const totalTonnes = entry.tonnes + totalCount * COUNT_TO_TONNE
   return { totalCount, totalTonnes }
 })
-
-function clamp01(v) {
-  return Math.min(1, Math.max(0, v))
-}
 
 function normalize(value, min, max) {
   if (max <= min) return 0
@@ -124,24 +242,33 @@ const tonnesNumberColor = computed(() => {
 })
 
 const narrativeCopy = computed(() => {
-  if (props.activeStep >= STEP_BAJA && props.activeStep <= STEP_BAJA_LINGER) {
-    return 'Baja California is another rapidly shifting zone, with catches clustering farther north than in previous decades.'
+  if (props.activeStep >= STEP_FULLVIEW_LINGER_START && props.activeStep <= STEP_FULLVIEW_LINGER_END) {
+    return LINGER_2023_FILLER
   }
-  if (props.activeStep >= STEP_NORTH_ATLANTIC && props.activeStep <= STEP_NORTH_ATLANTIC_LINGER) {
-    return 'In the North Atlantic, tuna fishing has moved away from tropical and temperate waters toward the pole.'
+  if (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep < STEP_MEDITERRANEAN_ANNOTATION) {
+    return MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION
+  }
+  if (props.activeStep === STEP_MEDITERRANEAN_ANNOTATION) {
+    return MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION
+  }
+  if (props.activeStep === STEP_BAJA) {
+    return BAJA_NARRATIVE_BEFORE_ANNOTATION
+  }
+  if (props.activeStep === STEP_BAJA_ANNOTATION) {
+    return BAJA_NARRATIVE_WITH_ANNOTATION
   }
   if (props.activeStep >= STEP_RETURN_FULL) {
     return 'Regional hotspots are intensifying while the full ocean picture continues to change.'
   }
-  return 'By 2023, global bluefin catches show clear large-scale redistribution before regional hotspots come into focus.'
+  return DEFAULT_FILLER
 })
 
 function overlayOpacity(region) {
-  if (region === 'north') {
-    return props.activeStep >= STEP_NORTH_ATLANTIC && props.activeStep <= STEP_NORTH_ATLANTIC_LINGER ? 1 : 0
+  if (region === 'mediterranean') {
+    return props.activeStep === STEP_MEDITERRANEAN_ANNOTATION ? 1 : 0
   }
   if (region === 'baja') {
-    return props.activeStep >= STEP_BAJA && props.activeStep <= STEP_BAJA_LINGER ? 1 : 0
+    return props.activeStep === STEP_BAJA_ANNOTATION ? 1 : 0
   }
   return 0
 }
@@ -156,25 +283,32 @@ function formatTonnes(v) {
 
 const tunaColorExpression = computed(() => {
   const y = currentYear.value
-  const combinedTonnes = [
-    '+',
-    ['coalesce', ['get', `tonne_${y}`], 0],
-    ['*', COUNT_TO_TONNE, ['coalesce', ['get', `count_${y}`], 0]],
-  ]
-  return [
-    'step',
-    combinedTonnes,
-    PUBU_COLORS[0],
-    10, PUBU_COLORS[1],
-    50, PUBU_COLORS[2],
-    100, PUBU_COLORS[3],
-    250, PUBU_COLORS[4],
-    500, PUBU_COLORS[5],
-    1000, PUBU_COLORS[6],
-    5000, PUBU_COLORS[7],
-    10000, PUBU_COLORS[8],
-  ]
+  const combinedTonnes = usingHighResData.value
+    ? ['coalesce', ['get', `tonne_${y}`], 0]
+    : [
+        '+',
+        ['coalesce', ['get', `tonne_${y}`], 0],
+        ['*', COUNT_TO_TONNE, ['coalesce', ['get', `count_${y}`], 0]],
+      ]
+  return buildCatchTonnesStepExpression(combinedTonnes)
 })
+
+function syncTunaCatchSourceToResolution() {
+  if (!map || !mapReady.value) return
+  const src = map.getSource('tuna-catch')
+  if (!src || typeof src.setData !== 'function') return
+  const nextUrl = usingHighResData.value ? tunaCatchData1degUrl : tunaCatchData5degUrl
+  if (nextUrl === lastLoadedTunaDataUrl) {
+    updateCatchLayer()
+    return
+  }
+  lastLoadedTunaDataUrl = nextUrl
+  src.setData(nextUrl)
+  map.once('idle', () => {
+    applyTunaCatchFillSeamMitigation()
+    updateCatchLayer()
+  })
+}
 
 function hideMapLabels() {
   if (!map || !mapReady.value) return
@@ -210,15 +344,21 @@ function updateCatchLayer() {
   map.setPaintProperty('tuna-catch-fill', 'fill-color', tunaColorExpression.value)
 }
 
+function applyTunaCatchFillSeamMitigation() {
+  if (!map || !mapReady.value || !map.getLayer('tuna-catch-fill')) return
+  // Reduces light “grid lines” between cells (anti-alias fringe over map water).
+  map.setPaintProperty('tuna-catch-fill', 'fill-antialias', false)
+}
+
 function cameraForStep(stepIndex) {
   const cameraPadding = window.innerWidth < 900
     ? { top: 24, right: 24, bottom: 24, left: 64 }
     : { top: 24, right: 40, bottom: 24, left: 220 }
-  if (stepIndex >= STEP_BAJA && stepIndex <= STEP_BAJA_LINGER) {
+  if (stepIndex >= STEP_BAJA && stepIndex <= STEP_BAJA_ANNOTATION) {
     return { key: 'baja', center: [-114.5, 27.6], zoom: 3.5, duration: 2600, padding: cameraPadding }
   }
-  if (stepIndex >= STEP_NORTH_ATLANTIC && stepIndex <= STEP_NORTH_ATLANTIC_LINGER) {
-    return { key: 'northAtlantic', center: [-20, 45], zoom: 3.35, duration: 2600, padding: cameraPadding }
+  if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_ANNOTATION) {
+    return { key: 'mediterranean', center: [14, 38], zoom: 4.35, duration: 2600, padding: cameraPadding }
   }
   return { key: 'global', center: [0, 0], zoom: 1.25, duration: 2600, padding: cameraPadding }
 }
@@ -239,6 +379,8 @@ function updateCameraForStep(stepIndex, force = false) {
 }
 
 onMounted(() => {
+  loadYearlyTotals1degFromUrl()
+
   if (!mapRef.value) return
 
   const mapboxToken = (
@@ -263,9 +405,10 @@ onMounted(() => {
   })
 
   map.on('load', () => {
+    lastLoadedTunaDataUrl = tunaCatchData5degUrl
     map.addSource('tuna-catch', {
       type: 'geojson',
-      data: tunaCatchDataUrl,
+      data: tunaCatchData5degUrl,
     })
 
     map.addLayer({
@@ -274,7 +417,8 @@ onMounted(() => {
       source: 'tuna-catch',
       paint: {
         'fill-color': tunaColorExpression.value,
-        'fill-opacity': 0.7,
+        'fill-opacity': 0.95,
+        'fill-antialias': false,
       },
     })
 
@@ -288,7 +432,7 @@ onMounted(() => {
       },
       'source-layer': 'country_boundaries',
       'paint': {
-          'fill-color': '#d1d5db',
+          'fill-color': '#13265f',
           'fill-opacity': 1
       }
     })
@@ -297,7 +441,8 @@ onMounted(() => {
     hideMapLabels()
     setProjection()
     neutralizeWaterColor()
-    updateCatchLayer()
+    applyTunaCatchFillSeamMitigation()
+    syncTunaCatchSourceToResolution()
     updateCameraForStep(props.activeStep, true)
   })
 
@@ -320,11 +465,16 @@ watch(currentYear, () => {
   updateCatchLayer()
 })
 
+watch(usingHighResData, () => {
+  syncTunaCatchSourceToResolution()
+})
+
 onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
   if (map) map.remove()
   map = null
+  lastLoadedTunaDataUrl = ''
 })
 </script>
 
@@ -347,14 +497,12 @@ onUnmounted(() => {
           <span class="metric-caption">Global ocean temperature:</span>
           <span>—</span>
         </p>
-      </div>
-      <div class="copy-card">
-        <p>{{ narrativeCopy }}</p>
+        <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
       </div>
     </div>
 
     <div class="callout-layer">
-      <div class="region-callout north-callout" :style="{ opacity: overlayOpacity('north') }">
+      <div class="region-callout mediterranean-callout" :style="{ opacity: overlayOpacity('mediterranean') }">
         <div class="callout-circle"></div>
         <p class="callout-label">warming quickly!</p>
       </div>
@@ -388,9 +536,7 @@ onUnmounted(() => {
   left: 0.85rem;
   top: 0.85rem;
   z-index: 7;
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
+  max-width: calc(100% - 1.7rem);
 }
 
 .metrics-card {
@@ -401,24 +547,13 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.92);
   color: #000000;
   min-width: min(280px, calc(100% - 2rem));
-  max-width: min(320px, calc(100% - 2rem));
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
-}
-
-.copy-card {
-  margin: 0;
-  padding: 0.7rem 0.8rem;
-  border-radius: 0.55rem;
-  border: 1px solid rgba(15, 23, 42, 0.2);
-  background: rgba(255, 255, 255, 0.92);
-  color: #000000;
-  min-width: min(360px, calc(100vw - 2rem));
   max-width: min(440px, calc(100vw - 2rem));
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
 }
 
-.copy-card p {
-  margin: 0;
+.narrative-copy {
+  margin: 0.55rem 0 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.12);
   font-size: 0.92rem;
   line-height: 1.35;
 }
@@ -469,9 +604,9 @@ onUnmounted(() => {
   transition: opacity 520ms ease;
 }
 
-.north-callout {
-  left: 47%;
-  top: 29%;
+.mediterranean-callout {
+  left: 46%;
+  top: 44%;
 }
 
 .baja-callout {
@@ -513,16 +648,4 @@ onUnmounted(() => {
   font-size: 0.8rem;
 }
 
-@media (max-width: 1100px) {
-  .hud-row {
-    max-width: calc(100% - 1.7rem);
-    flex-direction: column;
-    gap: 0.45rem;
-  }
-
-  .copy-card {
-    min-width: min(300px, calc(100vw - 2rem));
-    max-width: min(420px, calc(100vw - 2rem));
-  }
-}
 </style>

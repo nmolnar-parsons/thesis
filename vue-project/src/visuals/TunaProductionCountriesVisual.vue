@@ -5,20 +5,26 @@ import { csvParse } from 'd3-dsv'
 import { scaleLinear } from 'd3-scale'
 import { pointer, select } from 'd3-selection'
 import { area, stack, stackOffsetExpand } from 'd3-shape'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
+import {
+  CONTINENT_ORDER,
+  continentLegendSwatch,
+  getContinent,
+  getCountryColor as stableCountryColor,
+} from './countryContinentColors.js'
 
 const hostRef = ref(null)
 const tooltipRef = ref(null)
+/** When set, catch panel dims countries not in this continent (toggle same chip to clear). */
+const legendContinent = ref(null)
 
 let svg
 let resizeObserver
 let countryTotals = new Map()
 
-const JAPAN_RED = '#d32f2f'
 const TARGET_SPECIES = new Set(['SBF', 'BFT', 'PBF'])
-const LIGHT_BLUE = '#bfdbfe'
 const DEEP_BLUE = '#1d4ed8'
 const AQUA_MARINE = '#38bdf8'
 const UNREPORTED_COUNTRY = 'Unreported'
@@ -108,6 +114,12 @@ function parseAquacultureRowsForYears(years) {
   })
 }
 
+function updateTopPanelContinentHighlight() {
+  if (!svg) return
+  const sel = legendContinent.value
+  svg.selectAll('.stream.stream-top').classed('inactive', (d) => sel != null && getContinent(d.key) !== sel)
+}
+
 function drawChart() {
   if (!hostRef.value || !svg) return
 
@@ -152,18 +164,8 @@ function drawChart() {
   const aquaLayers = aquaStackGen(stackRowsAqua)
   const yScaleAqua = scaleLinear().domain([0, 1]).range([hBottom, 0])
 
-  const nonJapanTotals = countries
-    .filter((country) => country.toLowerCase() !== 'japan')
-    .map((country) => countryTotals.get(country) || 0)
-  const minTotal = Math.min(...nonJapanTotals, 0)
-  const maxTotal = Math.max(...nonJapanTotals, 1)
-  const blueScale = scaleLinear().domain([minTotal, maxTotal]).range([LIGHT_BLUE, DEEP_BLUE])
   const getCountryColor = (country) =>
-    country === UNREPORTED_COUNTRY
-      ? UNREPORTED_GREY
-      : country.toLowerCase() === 'japan'
-        ? JAPAN_RED
-        : blueScale(countryTotals.get(country) || 0)
+    country === UNREPORTED_COUNTRY ? UNREPORTED_GREY : stableCountryColor(country)
 
   const getAquaColor = (key) => (key === 'CAPTURE' ? DEEP_BLUE : AQUA_MARINE)
 
@@ -295,7 +297,7 @@ function drawChart() {
       updateHoverLine(event)
     })
     .on('mouseleave', () => {
-      gTop.selectAll('.stream-top').classed('inactive', false)
+      updateTopPanelContinentHighlight()
       hideTooltip()
       hideHoverLine()
     })
@@ -362,7 +364,17 @@ function drawChart() {
 
   hoverLine.raise()
   hoverLabel.raise()
+
+  updateTopPanelContinentHighlight()
 }
+
+function toggleLegendContinent(continent) {
+  legendContinent.value = legendContinent.value === continent ? null : continent
+}
+
+watch(legendContinent, () => {
+  updateTopPanelContinentHighlight()
+})
 
 onMounted(() => {
   const host = hostRef.value
@@ -385,6 +397,23 @@ onUnmounted(() => {
 
 <template>
   <div class="streamgraph-wrap">
+    <div class="country-legend" role="toolbar" aria-label="Catch by continent color group">
+      <button
+        v-for="c in CONTINENT_ORDER"
+        :key="c"
+        type="button"
+        class="legend-item"
+        :class="{
+          'legend-item--dimmed': legendContinent !== null && legendContinent !== c,
+          'legend-item--active': legendContinent !== null && legendContinent === c,
+        }"
+        :aria-pressed="legendContinent === c"
+        @click="toggleLegendContinent(c)"
+      >
+        <span class="legend-swatch" :style="{ background: continentLegendSwatch(c) }" />
+        <span class="legend-country">{{ c }}</span>
+      </button>
+    </div>
     <div ref="hostRef" class="d3-host" />
     <div ref="tooltipRef" class="tooltip" />
   </div>
@@ -394,15 +423,68 @@ onUnmounted(() => {
 .streamgraph-wrap {
   --viz-height: clamp(340px, 78vh, 640px);
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: var(--viz-height);
   max-height: 640px;
   overflow: hidden;
 }
 
+.country-legend {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem 0.8rem;
+  margin: 0 auto 1rem;
+  max-width: 1180px;
+}
+
+button.legend-item {
+  margin: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: #334155;
+  cursor: pointer;
+  transition: opacity 0.16s ease;
+}
+
+.legend-item--dimmed {
+  opacity: 0.28;
+}
+
+.legend-item--active {
+  opacity: 1;
+}
+
+.legend-swatch {
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 2px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  flex-shrink: 0;
+}
+
+.legend-country {
+  white-space: nowrap;
+}
+
 .d3-host {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 100%;
 }
 
 .d3-host :deep(svg) {
@@ -477,6 +559,12 @@ onUnmounted(() => {
   border-top: 1px solid rgba(248, 250, 252, 0.2);
   font-size: 0.7rem;
   color: #cbd5e1;
+}
+
+@media (max-width: 980px) {
+  .country-legend {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 900px) {
