@@ -1,17 +1,15 @@
 <script setup>
 import { arc, pie } from 'd3-shape'
 import { csvParse } from 'd3-dsv'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import csvRaw from '../data/tuna_imports_usa_customs.csv?raw'
 import { getContinent, getCountryColor } from './countryContinentColors.js'
 
 const YEAR_TARGET = 2025
 const BLUEFIN_PRODUCT = 'Tuna Bluefin Fresh'
-const SELECT_ALL_KEY = 'all'
-
-const GRID_OUTER_RADIUS = 62
-const GRID_INNER_RADIUS = 34
-const GRID_SVG_SIZE = 150
+const GRID_OUTER_RADIUS = 44
+const GRID_INNER_RADIUS = 24
+const GRID_SVG_SIZE = 108
 const GRID_CENTER = GRID_SVG_SIZE / 2
 
 const SINGLE_OUTER_RADIUS = 152
@@ -19,9 +17,21 @@ const SINGLE_INNER_RADIUS = 84
 const SINGLE_SVG_SIZE = 640
 const SINGLE_CENTER = SINGLE_SVG_SIZE / 2
 
-/** Radial bump then horizontal segment for donut callout lines (single view) */
-const CALLOUT_RADIAL_BUMP = 22
-const CALLOUT_HORIZONTAL = 48
+/** Radial bump from arc, then one straight segment to label (single bend). Donut-centered coords. */
+const CALLOUT_RADIAL_BUMP = 30
+/** Chord length along mostly-horizontal run from bump toward label */
+const CALLOUT_HORIZONTAL = 58
+/** Min vertical gap between stacked labels (same side), SVG user units */
+const CALLOUT_MIN_LABEL_GAP = 20
+/** Keep left callouts from reaching too far toward the menu (max x is toward +∞; clamp floor) */
+const CALLOUT_MIN_LEFT_X = -208
+/** Optional cap on right-side extent (donut-centered x) */
+const CALLOUT_MAX_RIGHT_X = 248
+const CALLOUT_DOT_R = 5.5
+const CALLOUT_TEXT_GAP = 12
+
+/** Leader lines / labels draw in the last portion of the morph (after arcs have mostly settled). */
+const CALLOUT_REVEAL_MORPH_START = 0.62
 
 const NYC_DISTRICT_KEY = 'New York, NY'
 
@@ -98,13 +108,14 @@ const districtCharts = computed(() => {
     .sort((a, b) => b.totalTonnes - a.totalTonnes)
 })
 
-const navItems = computed(() => {
-  const items = []
-  for (const c of districtCharts.value) {
-    items.push({ key: c.district, label: c.district })
-  }
-  items.push({ key: SELECT_ALL_KEY, label: 'All districts' })
-  return items
+/** Fit all menu donuts in the left column without scrolling (cols capped for narrow 1/3 strip). */
+const menuGridLayout = computed(() => {
+  const n = districtCharts.value.length
+  if (n === 0) return { cols: 1, rows: 1 }
+  let cols = Math.ceil(Math.sqrt(n))
+  cols = Math.min(Math.max(cols, 2), 4)
+  const rows = Math.ceil(n / cols)
+  return { cols, rows }
 })
 
 watch(
@@ -112,7 +123,7 @@ watch(
   (charts) => {
     if (!charts.length) return
     const keys = new Set(charts.map((c) => c.district))
-    if (selectedKey.value !== SELECT_ALL_KEY && !keys.has(selectedKey.value)) {
+    if (!keys.has(selectedKey.value)) {
       selectedKey.value = keys.has(NYC_DISTRICT_KEY) ? NYC_DISTRICT_KEY : charts[0].district
     }
   },
@@ -120,23 +131,147 @@ watch(
 )
 
 const selectedDistrictChart = computed(() => {
-  if (selectedKey.value === SELECT_ALL_KEY) return null
   return districtCharts.value.find((c) => c.district === selectedKey.value) ?? null
 })
 
-function selectNext() {
-  const items = navItems.value
-  const i = items.findIndex((x) => x.key === selectedKey.value)
-  const next = (i + 1) % items.length
-  selectedKey.value = items[next].key
+/** District-switch donut morph (interpolate arc angles between pies). */
+const MORPH_DURATION_MS = 560
+
+const morphArcs = ref(null)
+const morphCalloutReveal = ref(1)
+const isMorphing = ref(false)
+let morphRafId = 0
+
+function cancelMorphAnimation() {
+  if (morphRafId) {
+    cancelAnimationFrame(morphRafId)
+    morphRafId = 0
+  }
 }
 
-function selectPrev() {
-  const items = navItems.value
-  const i = items.findIndex((x) => x.key === selectedKey.value)
-  const prev = (i - 1 + items.length) % items.length
-  selectedKey.value = items[prev].key
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 }
+
+/** Build synthetic pie arc data at eased progress `te` in [0, 1] between two district charts. */
+function buildMorphArcPayload(prev, next, te) {
+  const prevBy = new Map(
+    prev.arcs.map((a) => [a.data.country, { startAngle: a.startAngle, endAngle: a.endAngle, data: a.data }]),
+  )
+  const nextBy = new Map(
+    next.arcs.map((a) => [a.data.country, { startAngle: a.startAngle, endAngle: a.endAngle, data: a.data }]),
+  )
+  const seen = new Set()
+  const orderedCountries = []
+  for (const a of next.arcs) {
+    const c = a.data.country
+    if (!seen.has(c)) {
+      seen.add(c)
+      orderedCountries.push(c)
+    }
+  }
+  for (const a of prev.arcs) {
+    const c = a.data.country
+    if (!seen.has(c)) {
+      seen.add(c)
+      orderedCountries.push(c)
+    }
+  }
+
+  const out = []
+  for (const country of orderedCountries) {
+    const pa = prevBy.get(country)
+    const na = nextBy.get(country)
+    const data = na?.data ?? pa?.data
+    if (!data) continue
+
+    let s0 = pa?.startAngle
+    let e0 = pa?.endAngle
+    let s1 = na?.startAngle
+    let e1 = na?.endAngle
+
+    if (na && !pa) {
+      const mid = (na.startAngle + na.endAngle) / 2
+      s0 = mid
+      e0 = mid
+    }
+    if (pa && !na) {
+      const mid = (pa.startAngle + pa.endAngle) / 2
+      s1 = mid
+      e1 = mid
+    }
+
+    const startAngle = s0 + (s1 - s0) * te
+    const endAngle = e0 + (e1 - e0) * te
+    if (endAngle - startAngle < 1e-7) continue
+
+    out.push({
+      data,
+      value: data.tonnes,
+      startAngle,
+      endAngle,
+      padAngle: 0,
+      index: 0,
+    })
+  }
+  out.sort((a, b) => a.startAngle - b.startAngle)
+  return out
+}
+
+watch(
+  selectedDistrictChart,
+  (next, prev) => {
+    cancelMorphAnimation()
+    morphArcs.value = null
+    morphCalloutReveal.value = 1
+    hoveredCountry.value = ''
+    tooltip.value.visible = false
+
+    if (!next) {
+      isMorphing.value = false
+      return
+    }
+    if (!prev || prev.district === next.district) {
+      isMorphing.value = false
+      return
+    }
+
+    isMorphing.value = true
+    morphCalloutReveal.value = 0
+    morphArcs.value = buildMorphArcPayload(prev, next, 0)
+    const t0 = performance.now()
+
+    function tick(now) {
+      const rawU = Math.min(1, (now - t0) / MORPH_DURATION_MS)
+      const te = easeInOutCubic(rawU)
+      morphArcs.value = buildMorphArcPayload(prev, next, te)
+      morphCalloutReveal.value =
+        rawU <= CALLOUT_REVEAL_MORPH_START
+          ? 0
+          : easeInOutCubic((rawU - CALLOUT_REVEAL_MORPH_START) / (1 - CALLOUT_REVEAL_MORPH_START))
+      if (rawU >= 1) {
+        morphArcs.value = null
+        morphCalloutReveal.value = 1
+        isMorphing.value = false
+        morphRafId = 0
+        return
+      }
+      morphRafId = requestAnimationFrame(tick)
+    }
+    morphRafId = requestAnimationFrame(tick)
+  },
+)
+
+onBeforeUnmount(() => {
+  cancelMorphAnimation()
+})
+
+const displaySingleArcs = computed(() => {
+  if (isMorphing.value) return morphArcs.value ?? selectedDistrictChart.value?.arcs ?? []
+  return selectedDistrictChart.value?.arcs ?? []
+})
+
+const calloutStrokeReveal = computed(() => (isMorphing.value ? morphCalloutReveal.value : 1))
 
 function sortLegendEntries(a, b) {
   if (a.country.toLowerCase() === 'japan') return -1
@@ -146,10 +281,7 @@ function sortLegendEntries(a, b) {
 }
 
 const legendCountries = computed(() => {
-  const rows =
-    selectedKey.value === SELECT_ALL_KEY
-      ? filteredImportRows.value
-      : filteredImportRows.value.filter((d) => d.district === selectedKey.value)
+  const rows = filteredImportRows.value.filter((d) => d.district === selectedKey.value)
 
   const totals = new Map()
   for (const row of rows) {
@@ -159,6 +291,33 @@ const legendCountries = computed(() => {
     .map(([country, tonnes]) => ({ country, tonnes, continent: getContinent(country) }))
     .sort(sortLegendEntries)
 })
+
+/**
+ * One bend only: outer arc → radial bump → straight to dot at label height.
+ * horizontalSpan: approximate run from bump toward the label (donut-centered x).
+ */
+function applyOneTurnLayout(r, labelY, horizontalSpan) {
+  const sx = r.onRight ? 1 : -1
+  let ex = r.bx + sx * horizontalSpan
+  const ey = labelY
+  if (!r.onRight) ex = Math.max(ex, CALLOUT_MIN_LEFT_X)
+  else ex = Math.min(ex, CALLOUT_MAX_RIGHT_X)
+  const dotX = ex
+  const dotY = ey
+  const textAnchor = r.onRight ? 'start' : 'end'
+  const textX = r.onRight ? dotX + CALLOUT_DOT_R + CALLOUT_TEXT_GAP : dotX - CALLOUT_DOT_R - CALLOUT_TEXT_GAP
+  return {
+    ...r,
+    tx: ex,
+    elbowY: r.by,
+    dotX,
+    dotY,
+    textX,
+    textY: ey,
+    textAnchor,
+    polylinePoints: `${r.ax},${r.ay} ${r.bx},${r.by} ${ex},${ey}`,
+  }
+}
 
 /** Leader-line callouts in donut-centered coords (radial dir from arc centroid = d3 arc convention) */
 function calloutForArc(arcDatum, arcGen, outerR, radialBump, horizontalLen) {
@@ -171,49 +330,75 @@ function calloutForArc(arcDatum, arcGen, outerR, radialBump, horizontalLen) {
   const bx = ux * (outerR + radialBump)
   const by = uy * (outerR + radialBump)
   const onRight = ux >= 0
-  const tx = bx + (onRight ? horizontalLen : -horizontalLen)
-  const ty = by
-  const dotPad = 10
-  const dotR = 4.5
-  const textGap = 8
-  let dotX
-  let textX
-  let textAnchor
-  if (onRight) {
-    dotX = tx + dotPad
-    textX = dotX + dotR + textGap
-    textAnchor = 'start'
-  } else {
-    dotX = tx - dotPad
-    textX = dotX - dotR - textGap
-    textAnchor = 'end'
-  }
-  const dotY = ty
-  const textY = ty
-  return {
+  const base = {
     country: arcDatum.data.country,
     color: getCountryColor(arcDatum.data.country),
-    polylinePoints: `${ax},${ay} ${bx},${by} ${tx},${ty} ${dotX},${dotY}`,
-    dotX,
-    dotY,
-    dotR,
-    textX,
-    textY,
-    textAnchor,
+    ux,
+    uy,
+    ax,
+    ay,
+    bx,
+    by,
     onRight,
+    dotR: CALLOUT_DOT_R,
+    labelY0: by,
+    segment: arcDatum.data,
   }
+  return applyOneTurnLayout(base, by, horizontalLen)
 }
 
-const singleDonutCallouts = computed(() => {
-  const chart = selectedDistrictChart.value
-  if (!chart) return []
-  return chart.arcs.map((arcDatum) => ({
+/** Nudge label Y on each side so stacked callouts do not overlap; rebuild one-turn polylines. */
+function packCalloutLabelYs(rows, minGap) {
+  const left = rows.filter((r) => !r.onRight)
+  const right = rows.filter((r) => r.onRight)
+  const placed = new Map()
+
+  for (const group of [left, right]) {
+    const sorted = [...group].sort((a, b) => a.labelY0 - b.labelY0)
+    let prevY = -Infinity
+    for (const r of sorted) {
+      const labelY = Math.max(r.labelY0, prevY + minGap)
+      prevY = labelY
+      placed.set(r.country, labelY)
+    }
+  }
+
+  return rows.map((r) => {
+    const labelY = placed.get(r.country) ?? r.labelY0
+    return applyOneTurnLayout(r, labelY, CALLOUT_HORIZONTAL)
+  })
+}
+
+function measurePolylineLength(pointsStr) {
+  const nums = pointsStr
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number)
+  let len = 0
+  for (let i = 2; i < nums.length; i += 2) {
+    len += Math.hypot(nums[i] - nums[i - 2], nums[i + 1] - nums[i - 1])
+  }
+  return Math.max(len, 1)
+}
+
+function buildPackedCallouts(chart) {
+  if (!chart?.arcs?.length) return []
+  const raw = chart.arcs.map((arcDatum) => ({
     ...calloutForArc(arcDatum, arcGeneratorSingle, SINGLE_OUTER_RADIUS, CALLOUT_RADIAL_BUMP, CALLOUT_HORIZONTAL),
     segment: arcDatum.data,
   }))
-})
+  const packed = packCalloutLabelYs(raw, CALLOUT_MIN_LABEL_GAP)
+  for (const r of packed) {
+    r.lineLength = measurePolylineLength(r.polylinePoints)
+  }
+  return packed
+}
+
+const singleDonutCallouts = computed(() => buildPackedCallouts(selectedDistrictChart.value))
 
 function onArcEnter(event, district, segment) {
+  if (isMorphing.value) return
   hoveredCountry.value = segment.country
   tooltip.value = {
     visible: true,
@@ -237,6 +422,7 @@ function onArcLeave() {
 }
 
 function onLegendEnter(country) {
+  if (isMorphing.value) return
   hoveredCountry.value = country
 }
 
@@ -246,6 +432,11 @@ function onLegendLeave() {
 
 function formatTonnes(value) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+function districtHasCountrySlice(district, country) {
+  if (!country || !district?.arcs?.length) return false
+  return district.arcs.some((a) => a.data.country === country)
 }
 </script>
 
@@ -269,38 +460,32 @@ function formatTonnes(value) {
       </div>
     </div>
 
-    <div class="imports-body">
-      <aside class="district-sidebar" aria-label="Customs district selection">
-        <div class="sidebar-nav">
-          <button type="button" class="nav-arrow" aria-label="Previous district" @click="selectPrev">‹</button>
-          <button type="button" class="nav-arrow" aria-label="Next district" @click="selectNext">›</button>
-        </div>
-        <ul class="district-list">
-          <li v-for="item in navItems" :key="item.key">
-            <button
-              type="button"
-              class="district-list__btn"
-              :class="{ 'district-list__btn--active': selectedKey === item.key }"
-              @click="selectedKey = item.key"
-            >
-              {{ item.label }}
-            </button>
-          </li>
-        </ul>
-      </aside>
-
-      <div class="imports-center">
-        <template v-if="selectedKey === SELECT_ALL_KEY">
-          <div class="district-grid">
-            <article v-for="district in districtCharts" :key="district.district" class="district-card">
-              <h3 class="district-title">{{ district.district }}</h3>
-              <p class="district-total">{{ formatTonnes(district.totalTonnes) }} t total</p>
-
+    <div class="imports-body imports-body--with-menu">
+      <aside class="district-menu" aria-label="Customs district selection">
+        <div
+          class="district-menu-grid"
+          :style="{
+            gridTemplateColumns: `repeat(${menuGridLayout.cols}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${menuGridLayout.rows}, minmax(0, 1fr))`,
+          }"
+        >
+          <button
+            v-for="district in districtCharts"
+            :key="district.district"
+            type="button"
+            class="district-menu-card"
+            :class="{ 'district-menu-card--active': selectedKey === district.district }"
+            :aria-label="`Select ${district.district}, ${formatTonnes(district.totalTonnes)} t total`"
+            @click="selectedKey = district.district"
+          >
+            <div class="district-menu-card__viz">
               <svg
-                :width="GRID_SVG_SIZE"
-                :height="GRID_SVG_SIZE"
                 :viewBox="`0 0 ${GRID_SVG_SIZE} ${GRID_SVG_SIZE}`"
-                class="donut-svg"
+                class="donut-svg donut-svg--menu"
+                preserveAspectRatio="xMidYMid meet"
+                width="100%"
+                height="100%"
+                aria-hidden="true"
               >
                 <g :transform="`translate(${GRID_CENTER},${GRID_CENTER})`">
                   <path
@@ -308,25 +493,32 @@ function formatTonnes(value) {
                     :key="`${district.district}-${arcDatum.data.country}`"
                     :d="arcGeneratorGrid(arcDatum)"
                     :fill="getCountryColor(arcDatum.data.country)"
-                    class="arc-segment"
+                    class="arc-segment arc-segment--menu"
                     :class="{
                       'arc-segment--dimmed':
-                        hoveredCountry && hoveredCountry !== arcDatum.data.country,
+                        hoveredCountry &&
+                        districtHasCountrySlice(district, hoveredCountry) &&
+                        hoveredCountry !== arcDatum.data.country,
                       'arc-segment--highlight':
                         hoveredCountry && hoveredCountry === arcDatum.data.country,
                     }"
-                    @mouseenter="onArcEnter($event, district, arcDatum.data)"
-                    @mousemove="onArcMove($event)"
-                    @mouseleave="onArcLeave"
                   />
                 </g>
               </svg>
-            </article>
-          </div>
-        </template>
+            </div>
+            <span class="district-menu-card__label">
+              {{ district.district }}
+            </span>
+          </button>
+        </div>
+      </aside>
 
-        <template v-else-if="selectedDistrictChart">
-          <article class="district-card district-card--single">
+      <div class="imports-center">
+        <template v-if="selectedDistrictChart">
+          <article
+            class="district-card district-card--single"
+            :class="{ 'district-card--morphing': isMorphing }"
+          >
             <h3 class="district-title">{{ selectedDistrictChart.district }}</h3>
             <p class="district-total">{{ formatTonnes(selectedDistrictChart.totalTonnes) }} t total</p>
 
@@ -338,7 +530,7 @@ function formatTonnes(value) {
             >
               <g :transform="`translate(${SINGLE_CENTER},${SINGLE_CENTER})`">
                 <path
-                  v-for="arcDatum in selectedDistrictChart.arcs"
+                  v-for="arcDatum in displaySingleArcs"
                   :key="`${selectedDistrictChart.district}-${arcDatum.data.country}`"
                   :d="arcGeneratorSingle(arcDatum)"
                   :fill="getCountryColor(arcDatum.data.country)"
@@ -367,14 +559,30 @@ function formatTonnes(value) {
                   @mousemove="onArcMove($event)"
                   @mouseleave="onArcLeave"
                 >
-                  <polyline :points="item.polylinePoints" class="callout-line" fill="none" />
-                  <circle :cx="item.dotX" :cy="item.dotY" :r="item.dotR" class="callout-dot" :fill="item.color" />
+                  <polyline
+                    :points="item.polylinePoints"
+                    class="callout-line"
+                    fill="none"
+                    :stroke="item.color"
+                    stroke-linecap="round"
+                    :stroke-dasharray="`${item.lineLength} ${item.lineLength}`"
+                    :stroke-dashoffset="item.lineLength * (1 - calloutStrokeReveal)"
+                  />
+                  <circle
+                    :cx="item.dotX"
+                    :cy="item.dotY"
+                    :r="item.dotR"
+                    class="callout-dot"
+                    :fill="item.color"
+                    :opacity="calloutStrokeReveal"
+                  />
                   <text
                     :x="item.textX"
                     :y="item.textY"
                     class="callout-text"
                     :text-anchor="item.textAnchor"
                     dominant-baseline="middle"
+                    :opacity="calloutStrokeReveal"
                   >
                     {{ item.country }}
                   </text>
@@ -457,77 +665,109 @@ function formatTonnes(value) {
   margin: 0 auto;
 }
 
-.district-sidebar {
-  flex: 0 0 13rem;
+.imports-body--with-menu {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.district-menu {
   min-width: 0;
-}
-
-.sidebar-nav {
   display: flex;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.nav-arrow {
+.district-menu-grid {
   flex: 1;
-  padding: 0.35rem 0.5rem;
-  font-size: 1.1rem;
-  line-height: 1;
-  color: #0f172a;
-  background: #f1f5f9;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 0.35rem;
-  cursor: pointer;
-  transition: background 0.15s ease;
+  min-height: 0;
+  display: grid;
+  gap: clamp(0.2rem, 1.2vw, 0.45rem);
+  align-content: stretch;
+  justify-content: stretch;
 }
 
-.nav-arrow:hover {
-  background: #e2e8f0;
-}
-
-.district-list {
-  list-style: none;
+.district-menu-card {
+  position: relative;
+  display: grid;
+  grid-template: 1fr / 1fr;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
-  padding: 0;
-  max-height: min(70vh, 28rem);
-  overflow-y: auto;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 0.4rem;
-  background: #fafafa;
-}
-
-.district-list li {
-  margin: 0;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-}
-
-.district-list li:last-child {
-  border-bottom: none;
-}
-
-.district-list__btn {
-  display: block;
-  width: 100%;
-  padding: 0.45rem 0.55rem;
-  text-align: left;
-  font-size: 0.72rem;
-  line-height: 1.35;
-  color: #334155;
-  background: transparent;
+  padding: clamp(0.1rem, 0.6vw, 0.2rem);
   border: none;
+  border-radius: 0.3rem;
+  background: transparent;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: box-shadow 0.14s ease;
 }
 
-.district-list__btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+.district-menu-card:hover {
+  box-shadow: none;
 }
 
-.district-list__btn--active {
-  background: #e0f2fe;
-  color: #0c4a6e;
+.district-menu-card--active {
+  box-shadow: inset 0 0 0 2px rgba(12, 74, 110, 0.45);
+  border-radius: 0.35rem;
+}
+
+.district-menu-card__viz {
+  grid-area: 1 / 1;
+  z-index: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  justify-self: center;
+  align-self: center;
+  transition: opacity 0.18s ease;
+}
+
+.district-menu-card:hover .district-menu-card__viz {
+  opacity: 0.38;
+}
+
+.district-menu-card__label {
+  grid-area: 1 / 1;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  justify-self: stretch;
+  padding: 0.15rem;
+  text-align: center;
+  font-size: clamp(0.52rem, 2.1vw, 0.72rem);
   font-weight: 600;
+  line-height: 1.15;
+  color: #0f172a;
+  background: none;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  text-shadow:
+    0 0 6px rgba(255, 255, 255, 0.98),
+    0 0 14px rgba(255, 255, 255, 0.85),
+    0 1px 2px rgba(255, 255, 255, 0.95);
+}
+
+.district-menu-card:hover .district-menu-card__label {
+  opacity: 1;
+}
+
+.donut-svg--menu {
+  display: block;
+}
+
+.arc-segment--menu {
+  pointer-events: none;
+}
+
+.arc-segment--menu.arc-segment--highlight {
+  stroke-width: 1.65;
 }
 
 .imports-center {
@@ -535,24 +775,30 @@ function formatTonnes(value) {
   min-width: 0;
 }
 
-.district-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.85rem;
-}
-
-.district-card {
-  padding: 0.25rem 0.35rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-height: 210px;
+.imports-body--with-menu .imports-center {
+  min-width: 0;
 }
 
 .district-card--single {
   min-height: auto;
-  max-width: min(100%, 42rem);
+  max-width: 100%;
   margin: 0 auto;
+}
+
+.district-card--single .district-title {
+  margin-bottom: 0;
+}
+
+.district-card--single .district-total {
+  margin: 0.2rem 0 0.25rem;
+}
+
+.district-card--morphing .arc-segment {
+  pointer-events: none;
+}
+
+.district-card--morphing .callout-group {
+  pointer-events: none;
 }
 
 .district-title {
@@ -575,7 +821,10 @@ function formatTonnes(value) {
 
 .donut-svg--single {
   display: block;
-  margin: 0 auto;
+  width: min(100%, 640px);
+  max-width: 100%;
+  height: auto;
+  margin: -5.25rem auto 0;
 }
 
 .arc-segment {
@@ -604,9 +853,9 @@ function formatTonnes(value) {
 }
 
 .callout-line {
-  stroke: #64748b;
-  stroke-width: 1.15;
+  stroke-width: 2.35;
   stroke-linejoin: round;
+  stroke-linecap: round;
   pointer-events: visibleStroke;
 }
 
@@ -617,7 +866,7 @@ function formatTonnes(value) {
 }
 
 .callout-text {
-  font-size: 0.72rem;
+  font-size: 15px;
   font-weight: 600;
   fill: #0f172a;
   pointer-events: visibleFill;
@@ -632,8 +881,7 @@ function formatTonnes(value) {
 }
 
 .callout-group--highlight .callout-line {
-  stroke: #0f172a;
-  stroke-width: 1.35;
+  stroke-width: 2.85;
 }
 
 .tooltip {
@@ -652,17 +900,7 @@ function formatTonnes(value) {
   font-weight: 700;
 }
 
-@media (max-width: 1280px) {
-  .district-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 980px) {
-  .district-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .country-legend {
     justify-content: flex-start;
   }
@@ -673,17 +911,21 @@ function formatTonnes(value) {
     flex-direction: column;
   }
 
-  .district-sidebar {
-    flex: none;
+  .imports-body--with-menu {
+    grid-template-columns: 1fr;
+  }
+
+  .district-menu {
     width: 100%;
   }
 
-  .district-list {
-    max-height: 10rem;
-  }
-
-  .district-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .district-menu-grid {
+    flex: none;
+    min-height: auto;
+    grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr)) !important;
+    grid-template-rows: none !important;
+    grid-auto-rows: minmax(3.25rem, auto);
+    gap: 0.35rem;
   }
 }
 </style>
