@@ -14,8 +14,6 @@ const steps = [
   // 5–8: global view linger (pacing)
   { id: 'm6', title: '', text: '' },
   { id: 'm7', title: '', text: '' },
-  { id: 'm8', title: '', text: '' },
-  { id: 'm9', title: '', text: '' },
   // 9–11: Mediterranean year scrub (2007 → 2023)
   { id: 'm10', title: '', text: '' },
   { id: 'm11', title: '', text: '' },

@@ -35,11 +35,11 @@ const steps = [
     title: '',
     text: 'This story is matched by Pacific and Southern Bluefin tuna species. High fishing pressure -> overfishing -> slow recovery after extensive stock management. 80,000 tonnes of bluefin are caught each year, mainly to serve the sushi industry.',
   },
-  {
-    id: 'hf5',
-    title: 'Yet there was never a danger of running out of fish for sushi:',
-    text: 'While bluefin tuna is the choice tuna for sushi, Bigeye and Yellowfin are used as well.',
-  },
+  // {
+  //   id: 'hf5',
+  //   title: 'Yet there was never a danger of running out of fish for sushi:',
+  //   text: 'While bluefin tuna is the choice tuna for sushi, Bigeye and Yellowfin are used as well.',
+  // },
 ]
 </script>
 

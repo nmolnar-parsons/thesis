@@ -57,19 +57,19 @@ const STAGES = [
   {
     species: ['BFT', 'PBF', 'SBF'],
   },
-  {
-    species: ['PBF', 'BFT', 'SBF', 'YFT', 'BET'],
-    annotations: [
-      {
-        type: 'bracket',
-        orientation: 'vertical',
-        year: 2023,
-        y1: 0,
-        y2: 70000,
-        label: 'the entire bluefin catch!',
-      },
-    ],
-  },
+  // {
+  //   species: ['PBF', 'BFT', 'SBF', 'YFT', 'BET'],
+  //   annotations: [
+  //     {
+  //       type: 'bracket',
+  //       orientation: 'vertical',
+  //       year: 2023,
+  //       y1: 0,
+  //       y2: 70000,
+  //       label: 'the entire bluefin catch!',
+  //     },
+  //   ],
+  // },
 ]
 
 const LAST_STAGE_INDEX = STAGES.length - 1
