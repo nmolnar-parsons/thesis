@@ -10,6 +10,8 @@ import 'd3-transition'
 import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
+import tunaJapanImgUrl from './wild-farmed/tuna-japan.jpg?url'
+import fishFarmImgUrl from './wild-farmed/fish-farm.jpg?url'
 import {
   CONTINENT_ORDER,
   continentLegendSwatch,
@@ -100,8 +102,9 @@ function maybeStartStreamReveal(ioEntryMaybe) {
 }
 
 const TARGET_SPECIES = new Set(['SBF', 'BFT', 'PBF'])
-const DEEP_BLUE = '#1d4ed8'
-const AQUA_MARINE = '#38bdf8'
+/** SVG pattern ids for wild vs farmed area fills (bottom panel). */
+const PATTERN_WILD_CAPTURE_FILL = 'tuna-wild-capture-texture'
+const PATTERN_AQUACULTURE_FILL = 'tuna-aquaculture-texture'
 const UNREPORTED_COUNTRY = 'Unreported'
 const UNREPORTED_GREY = '#9ca3af'
 const YEAR_START = 1965
@@ -141,8 +144,13 @@ function parseProductionData() {
   )
 
   const countries = Array.from(new Set(rows.map((d) => d.country))).sort((a, b) => {
-    if (a === UNREPORTED_COUNTRY) return -1
-    if (b === UNREPORTED_COUNTRY) return 1
+    if (a === UNREPORTED_COUNTRY && b !== UNREPORTED_COUNTRY) return -1
+    if (b === UNREPORTED_COUNTRY && a !== UNREPORTED_COUNTRY) return 1
+    const ordA = CONTINENT_ORDER.indexOf(getContinent(a))
+    const ordB = CONTINENT_ORDER.indexOf(getContinent(b))
+    const ia = ordA === -1 ? CONTINENT_ORDER.length : ordA
+    const ib = ordB === -1 ? CONTINENT_ORDER.length : ordB
+    if (ia !== ib) return ia - ib
     return a.localeCompare(b)
   })
 
@@ -197,6 +205,65 @@ function updateTopPanelContinentHighlight() {
   svg.selectAll('.stream.stream-top').classed('inactive', (d) => sel != null && getContinent(d.key) !== sel)
 }
 
+/**
+ * Bottom strip textures: same pipeline for wild-capture and aquaculture — panel-sized
+ * userSpaceOnUse pattern, center crop via zoom, optional slight Y squash, xMidYMid slice.
+ */
+const WILD_JAPAN_CENTER_ZOOM = 1.42
+const WILD_JAPAN_HEIGHT_SQUASH = 0.92
+/** Fish-farm: moderate center zoom (pens across frame); no Y squash keeps rings round. */
+const AQUA_FARM_CENTER_ZOOM = 1
+const AQUA_FARM_HEIGHT_SQUASH = 1
+/** Map one texture across this x-domain (same scale as main year axis, 1965–2022). */
+const AQUA_TEXTURE_YEAR_START = 1987
+const AQUA_TEXTURE_YEAR_END = 2022
+
+function appendBottomStripTexturePattern(
+  defs,
+  id,
+  imageHref,
+  patternWidth,
+  patternHeight,
+  centerZoom,
+  heightSquash,
+  patternX = 0,
+  patternY = 0,
+) {
+  const w = Math.max(1, patternWidth)
+  const h = Math.max(1, patternHeight)
+  const pat = defs
+    .append('pattern')
+    .attr('id', id)
+    .attr('patternUnits', 'userSpaceOnUse')
+    .attr('patternContentUnits', 'userSpaceOnUse')
+    .attr('x', patternX)
+    .attr('y', patternY)
+    .attr('width', w)
+    .attr('height', h)
+
+  const needsYScale =
+    Number.isFinite(heightSquash) && Math.abs(heightSquash - 1) > 1e-6
+  const parent = needsYScale
+    ? pat
+        .append('g')
+        .attr(
+          'transform',
+          `translate(${w / 2} ${h / 2}) scale(1 ${heightSquash}) translate(${-w / 2} ${-h / 2})`,
+        )
+    : pat
+
+  const iw = w * centerZoom
+  const ih = h * centerZoom
+  parent
+    .append('image')
+    .attr('href', imageHref)
+    .attr('x', (w - iw) / 2)
+    .attr('y', (h - ih) / 2)
+    .attr('width', iw)
+    .attr('height', ih)
+    .attr('preserveAspectRatio', 'xMidYMid slice')
+}
+
 function drawChart() {
   if (!hostRef.value || !svg) return
 
@@ -227,8 +294,8 @@ function drawChart() {
   svg.attr('width', width).attr('height', svgHeight)
   svg.selectAll('*').remove()
 
+  const defs = svg.append('defs')
   if (!streamsRevealDone) {
-    const defs = svg.append('defs')
     defs
       .append('clipPath')
       .attr('id', STREAM_CLIP_PANEL_TOP)
@@ -251,6 +318,34 @@ function drawChart() {
       .attr('width', 0)
       .attr('height', hBottom)
   }
+  const yearDomainSpan = YEAR_END - YEAR_START
+  const aquaTexLeft =
+    ((AQUA_TEXTURE_YEAR_START - YEAR_START) / yearDomainSpan) * innerWidth
+  const aquaTexW = Math.max(
+    1,
+    ((AQUA_TEXTURE_YEAR_END - AQUA_TEXTURE_YEAR_START) / yearDomainSpan) * innerWidth,
+  )
+
+  appendBottomStripTexturePattern(
+    defs,
+    PATTERN_WILD_CAPTURE_FILL,
+    tunaJapanImgUrl,
+    innerWidth,
+    hBottom,
+    WILD_JAPAN_CENTER_ZOOM,
+    WILD_JAPAN_HEIGHT_SQUASH,
+  )
+  appendBottomStripTexturePattern(
+    defs,
+    PATTERN_AQUACULTURE_FILL,
+    fishFarmImgUrl,
+    aquaTexW,
+    hBottom,
+    AQUA_FARM_CENTER_ZOOM,
+    AQUA_FARM_HEIGHT_SQUASH,
+    aquaTexLeft,
+    0,
+  )
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -273,7 +368,10 @@ function drawChart() {
   const getCountryColor = (country) =>
     country === UNREPORTED_COUNTRY ? UNREPORTED_GREY : stableCountryColor(country)
 
-  const getAquaColor = (key) => (key === 'CAPTURE' ? DEEP_BLUE : AQUA_MARINE)
+  const getAquaFill = (key) =>
+    key === 'CAPTURE'
+      ? `url(#${PATTERN_WILD_CAPTURE_FILL})`
+      : `url(#${PATTERN_AQUACULTURE_FILL})`
 
   const areaTop = area()
     .x((point) => xScale(point.data.year))
@@ -424,7 +522,7 @@ function drawChart() {
     .join('path')
     .attr('class', 'stream stream-aqua')
     .attr('d', areaAqua)
-    .attr('fill', (d) => getAquaColor(d.key))
+    .attr('fill', (d) => getAquaFill(d.key))
     .on('mouseenter', function (event, series) {
       gAqua.selectAll('.stream-aqua').classed('inactive', (d) => d.key !== series.key)
       updateTooltipAqua(event, series)
@@ -541,23 +639,33 @@ onUnmounted(() => {
 
 <template>
   <div ref="wrapRef" class="streamgraph-wrap">
-    <div class="country-legend" role="toolbar" aria-label="Catch by continent color group">
-      <button
-        v-for="c in CONTINENT_ORDER"
-        :key="c"
-        type="button"
-        class="legend-item"
-        :class="{
-          'legend-item--dimmed': legendContinent !== null && legendContinent !== c,
-          'legend-item--active': legendContinent !== null && legendContinent === c,
-        }"
-        :aria-pressed="legendContinent === c"
-        @click="toggleLegendContinent(c)"
-      >
-        <span class="legend-swatch" :style="{ background: continentLegendSwatch(c) }" />
-        <span class="legend-country">{{ c }}</span>
-      </button>
-    </div>
+    <aside class="legend" role="toolbar" aria-label="Catch by continent color group">
+      <ul class="legend-list">
+        <li
+          v-for="c in CONTINENT_ORDER"
+          :key="c"
+          class="legend-item"
+          :class="{
+            'is-inactive': legendContinent !== null && legendContinent !== c,
+            'is-active': legendContinent !== null && legendContinent === c,
+          }"
+          :aria-pressed="legendContinent === c"
+          role="button"
+          tabindex="0"
+          @click="toggleLegendContinent(c)"
+          @keydown.enter.prevent="toggleLegendContinent(c)"
+          @keydown.space.prevent="toggleLegendContinent(c)"
+        >
+          <span
+            class="swatch"
+            :style="{
+              '--swatch-color': continentLegendSwatch(c),
+            }"
+          />
+          <span class="legend-label">{{ c }}</span>
+        </li>
+      </ul>
+    </aside>
     <div ref="hostRef" class="d3-host" />
     <div ref="tooltipRef" class="tooltip" />
   </div>
@@ -575,53 +683,68 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.country-legend {
+.legend {
+  position: relative;
   flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.45rem 0.8rem;
-  margin: 0 auto 1rem;
+  width: 100%;
   max-width: 1180px;
+  margin: 0 auto 0.6rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
-button.legend-item {
+.legend-list {
+  list-style: none;
   margin: 0;
-  border: none;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  text-align: inherit;
+  padding: 0.1rem 0.15rem;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.2rem 0.75rem;
+  width: max-content;
+  min-width: 100%;
 }
 
 .legend-item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  color: #334155;
+  gap: 0.4rem;
+  padding: 0.12rem 0.05rem;
+  font-size: 0.68rem;
+  color: #0f172a;
   cursor: pointer;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.18s ease;
+  margin: 0;
 }
 
-.legend-item--dimmed {
-  opacity: 0.28;
-}
-
-.legend-item--active {
+.legend-item.is-active {
   opacity: 1;
+  font-weight: 700;
 }
 
-.legend-swatch {
-  width: 0.62rem;
-  height: 0.62rem;
+.legend-item.is-inactive {
+  opacity: 0.32;
+}
+
+.swatch {
+  width: 1rem;
+  height: 0;
+  border-top: 3px solid var(--swatch-color);
+  border-top-style: solid;
   border-radius: 2px;
-  border: 1px solid rgba(15, 23, 42, 0.2);
+  background: transparent;
+  border-image: none;
   flex-shrink: 0;
 }
 
-.legend-country {
+.legend-label {
   white-space: nowrap;
 }
 
@@ -657,8 +780,16 @@ button.legend-item {
   cursor: pointer;
 }
 
+.streamgraph-wrap :deep(.stream.stream-aqua) {
+  fill-opacity: 0.92;
+}
+
 .streamgraph-wrap :deep(.stream:hover) {
   fill-opacity: 0.9;
+}
+
+.streamgraph-wrap :deep(.stream.stream-aqua:hover) {
+  fill-opacity: 0.98;
 }
 
 .streamgraph-wrap :deep(.stream.inactive) {
@@ -703,12 +834,6 @@ button.legend-item {
   border-top: 1px solid rgba(248, 250, 252, 0.2);
   font-size: 0.7rem;
   color: #cbd5e1;
-}
-
-@media (max-width: 980px) {
-  .country-legend {
-    justify-content: flex-start;
-  }
 }
 
 @media (max-width: 900px) {

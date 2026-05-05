@@ -7,6 +7,7 @@ import StackedBars from './sections/StackedBars.vue'
 import Title from './sections/Title.vue'
 import CountryProduction from './sections/CountryProduction.vue'
 import DomesticImports from './sections/DomesticImports.vue'
+import Ending from './sections/Ending.vue'
 </script>
 
 <template>
@@ -19,5 +20,6 @@ import DomesticImports from './sections/DomesticImports.vue'
     <CountryProduction />
     <Map />
     <DomesticImports />
+    <Ending />
   </main>
 </template>

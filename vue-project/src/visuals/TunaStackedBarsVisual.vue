@@ -237,7 +237,7 @@ function drawChart() {
   const width = el.clientWidth || 800
   const height = el.clientHeight || 480
   if (width < 20 || height < 20) return
-  const margin = { top: 28, right: 160, bottom: 48, left: 62 }
+  const margin = { top: 48, right: 24, bottom: 48, left: 62 }
   const innerW = width - margin.left - margin.right
   const innerH = height - margin.top - margin.bottom
   if (innerW < 20 || innerH < 20) return
@@ -592,7 +592,7 @@ onUnmounted(() => {
     <aside class="legend" aria-label="Species in chart">
       <TransitionGroup name="legend" tag="ul" class="legend-list">
         <li v-for="s in legendSpecies" :key="s.code" class="legend-item">
-          <span class="swatch" :style="{ background: SPECIES_COLORS[s.code] }" />
+          <span class="swatch" :style="{ '--swatch-color': SPECIES_COLORS[s.code] }" />
           <span class="legend-label">{{ s.label }}</span>
         </li>
       </TransitionGroup>
@@ -652,42 +652,52 @@ onUnmounted(() => {
 
 .legend {
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  max-width: 11rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 0.5rem;
-  background: rgba(248, 250, 252, 0.94);
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-  pointer-events: none;
+  top: 0.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 1rem);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .legend-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.1rem 0.15rem;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.2rem 0.75rem;
+  width: max-content;
+  min-width: 100%;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.72rem;
+  gap: 0.4rem;
+  padding: 0.12rem 0.05rem;
+  font-size: 0.68rem;
   color: #0f172a;
   line-height: 1.25;
-  padding: 0.2rem 0;
 }
 
 .swatch {
-  width: 0.65rem;
-  height: 0.65rem;
+  width: 1rem;
+  height: 0;
+  border-top: 3px solid var(--swatch-color);
+  border-top-style: solid;
   border-radius: 2px;
+  background: transparent;
+  border-image: none;
   flex-shrink: 0;
-}
-
-.legend-label strong {
-  font-weight: 700;
 }
 
 .legend-enter-active,
@@ -712,8 +722,7 @@ onUnmounted(() => {
   }
 
   .legend {
-    max-width: 9.25rem;
-    padding: 0.4rem 0.5rem;
+    top: 0.2rem;
   }
 }
 </style>
