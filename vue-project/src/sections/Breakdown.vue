@@ -4,6 +4,13 @@ import StorySection from '../components/story/StorySection.vue'
 import SectionGrid from '../components/layout/SectionGrid.vue'
 import CopyBlock from '../components/layout/CopyBlock.vue'
 import TunaRainVisual from '../visuals/TunaRainVisual.vue'
+
+defineProps({
+  minimalMode: {
+    type: Boolean,
+    default: false,
+  },
+})
 </script>
 
 <template>
@@ -13,7 +20,7 @@ import TunaRainVisual from '../visuals/TunaRainVisual.vue'
         <TunaRainVisual />
       </div>
       <SectionGrid class="breakdown-foreground" :columns="12" gap="1.25rem" align="center">
-        <div class="story-copy">
+        <div v-if="!minimalMode" class="story-copy">
           <CopyBlock title="Bluefin Tuna was once almost fished to extinction.">
             <p>
               filler filler filler filler filler

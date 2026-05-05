@@ -4,6 +4,13 @@ import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import TunaStackedBarsVisual from '../visuals/TunaStackedBarsVisual.vue'
 
+defineProps({
+  minimalMode: {
+    type: Boolean,
+    default: false,
+  },
+})
+
 const steps = [
   {
     id: 'chart-intro',
@@ -52,7 +59,7 @@ const steps = [
           <TunaStackedBarsVisual :active-step="graphicProps.activeStep" />
         </template>
         <template #step="{ step }">
-          <CopyBlock :title="step.title">
+          <CopyBlock v-if="!minimalMode" :title="step.title">
             <p style="white-space: pre-line">{{ step.text }}</p>
           </CopyBlock>
         </template>

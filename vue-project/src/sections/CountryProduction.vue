@@ -3,12 +3,19 @@ import CopyBlock from '../components/layout/CopyBlock.vue'
 import SectionGrid from '../components/layout/SectionGrid.vue'
 import StorySection from '../components/story/StorySection.vue'
 import TunaProductionCountriesVisual from '../visuals/TunaProductionCountriesVisual.vue'
+
+defineProps({
+  minimalMode: {
+    type: Boolean,
+    default: false,
+  },
+})
 </script>
 
 <template>
   <StorySection id="country-production" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="start">
-      <div class="story-copy story-copy--top production-copy">
+      <div v-if="!minimalMode" class="story-copy story-copy--top production-copy">
         <CopyBlock title="Global Production">
           <p>
             The streamgraph tracks annual bluefin tuna imports by country. Stream thickness shows

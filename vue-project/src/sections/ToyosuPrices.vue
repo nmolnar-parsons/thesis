@@ -3,31 +3,30 @@ import CopyBlock from '../components/layout/CopyBlock.vue'
 import SectionGrid from '../components/layout/SectionGrid.vue'
 import StorySection from '../components/story/StorySection.vue'
 import ToyosuPricesLineVisual from '../visuals/ToyosuPricesLineVisual.vue'
+
+defineProps({
+  minimalMode: {
+    type: Boolean,
+    default: false,
+  },
+})
 </script>
 
 <template>
   <StorySection id="toyosu-prices" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="start">
-      <div class="story-copy story-copy--top toyosu-copy-top">
-        <CopyBlock title="Tsukiji and Toyosu and Where Your Fish Comes From">
+      <div v-if="!minimalMode" class="story-copy story-copy--top toyosu-copy-top">
+        <CopyBlock title="Why do we catch so much tuna">
           <p>
-            Annual Toyosu market prices show how bluefin valuation shifts over two decades.
+            it's really expensive!
           </p>
         </CopyBlock>
       </div>
 
-      <div class="toyosu-visual">
+      <div v-if="!minimalMode" class="toyosu-visual">
         <ToyosuPricesLineVisual />
       </div>
 
-      <div class="story-copy toyosu-copy-bottom">
-        <CopyBlock>
-          <p>
-            bluefin tuna is almost exclusively used for sushi. To do otherwise would be to throw
-            value back into the ocean
-          </p>
-        </CopyBlock>
-      </div>
     </SectionGrid>
   </StorySection>
 </template>
