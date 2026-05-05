@@ -16,17 +16,21 @@ const steps = [
   { id: 'm7', title: '', text: '' },
   { id: 'm8', title: '', text: '' },
   { id: 'm9', title: '', text: '' },
-  // 9–11: Mediterranean (before-annotation, before-annotation, annotation + circle)
+  // 9–11: Mediterranean year scrub (2007 → 2023)
   { id: 'm10', title: '', text: '' },
   { id: 'm11', title: '', text: '' },
   { id: 'm12', title: '', text: '' },
-  // 12–13: Baja (Baja 1 no circle, Baja 2 + circle)
+  // 12: basin annotation appears (ellipse persists through next steps)
   { id: 'm13', title: '', text: '' },
+  // 13–16: Mediterranean linger at 2023 (ellipse stays visible)
   { id: 'm14', title: '', text: '' },
-  // 14–16: return to global + end padding (m17 = extra beat after m16)
   { id: 'm15', title: '', text: '' },
   { id: 'm16', title: '', text: '' },
   { id: 'm17', title: '', text: '' },
+  // 17–19: return to global + end padding
+  { id: 'm18', title: '', text: '' },
+  { id: 'm19', title: '', text: '' },
+  { id: 'm20', title: '', text: '' },
 ]
 </script>
 

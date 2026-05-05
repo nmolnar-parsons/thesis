@@ -2,10 +2,12 @@
 import { max, rollup, sum } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { csvParse } from 'd3-dsv'
+import { easeCubicOut } from 'd3-ease'
 import { scaleLinear } from 'd3-scale'
 import { pointer, select } from 'd3-selection'
 import { area, stack, stackOffsetExpand } from 'd3-shape'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import 'd3-transition'
+import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
 import {
@@ -16,13 +18,86 @@ import {
 } from './countryContinentColors.js'
 
 const hostRef = ref(null)
+const wrapRef = ref(null)
 const tooltipRef = ref(null)
 /** When set, catch panel dims countries not in this continent (toggle same chip to clear). */
 const legendContinent = ref(null)
 
 let svg
 let resizeObserver
+let intersectionObserver
+
+/** Rough vertical visibility of wrap (overlap height / bounding height); mirrors IO ratio for tall blocks in full-width layouts. */
+function wrapIntersectionRatioApprox() {
+  const wrap = wrapRef.value
+  if (!wrap) return 0
+  const rect = wrap.getBoundingClientRect()
+  const vh = window.innerHeight || 1
+  if (rect.height <= 1) return 0
+  const topClamp = Math.max(0, rect.top)
+  const bottomClamp = Math.min(vh, rect.bottom)
+  const overlapPx = Math.max(0, bottomClamp - topClamp)
+  return overlapPx / rect.height
+}
+
+/** One-shot left-to-right fill has finished; redraw omits clipping. */
+let streamsRevealDone = false
+/** Guard duplicate starts from IO vs resize probing. */
+let revealInProgress = false
+
+let lastRevealInnerWidth = 0
 let countryTotals = new Map()
+
+/** Per-panel defs ids; rects live at (0,0) inside each clipped shell so coords match `.stream` path space. */
+const STREAM_CLIP_PANEL_TOP = 'tuna-stream-clip-panel-top'
+const STREAM_CLIP_PANEL_BOTTOM = 'tuna-stream-clip-panel-bottom'
+const STREAM_REVEAL_MS = 1150
+const REVEAL_START_INTERSECTION = 1 / 3
+
+function maybeStartStreamReveal(ioEntryMaybe) {
+  if (!svg || streamsRevealDone || revealInProgress) return
+  const innerWidthPx = lastRevealInnerWidth
+  if (innerWidthPx < 20) return
+
+  let ratio
+  if (ioEntryMaybe) {
+    if (!ioEntryMaybe.isIntersecting) return
+    ratio = ioEntryMaybe.intersectionRatio
+  } else {
+    ratio = wrapIntersectionRatioApprox()
+  }
+
+  if (ratio + 1e-5 < REVEAL_START_INTERSECTION) return
+
+  const topSel = svg.select('.clip-reveal-top')
+  const bottomSel = svg.select('.clip-reveal-bottom')
+  if (!topSel.node() || !bottomSel.node()) return
+
+  revealInProgress = true
+  let pending = 2
+  function onEnd() {
+    pending -= 1
+    if (pending > 0) return
+    revealInProgress = false
+    streamsRevealDone = true
+    svg.select('.streams-shell-top').attr('clip-path', null)
+    svg.select('.streams-shell-aqua').attr('clip-path', null)
+  }
+
+  topSel
+    .transition()
+    .duration(STREAM_REVEAL_MS)
+    .ease(easeCubicOut)
+    .attr('width', innerWidthPx)
+    .on('end', onEnd)
+
+  bottomSel
+    .transition()
+    .duration(STREAM_REVEAL_MS)
+    .ease(easeCubicOut)
+    .attr('width', innerWidthPx)
+    .on('end', onEnd)
+}
 
 const TARGET_SPECIES = new Set(['SBF', 'BFT', 'PBF'])
 const DEEP_BLUE = '#1d4ed8'
@@ -30,7 +105,7 @@ const AQUA_MARINE = '#38bdf8'
 const UNREPORTED_COUNTRY = 'Unreported'
 const UNREPORTED_GREY = '#9ca3af'
 const YEAR_START = 1965
-const YEAR_END = 2023
+const YEAR_END = 2022
 
 const SERIES_KEYS = ['CAPTURE', 'MARINE']
 const SERIES_LABELS = {
@@ -65,12 +140,14 @@ function parseProductionData() {
     (d) => d.country,
   )
 
-  const years = Array.from(grouped.keys()).sort((a, b) => a - b)
   const countries = Array.from(new Set(rows.map((d) => d.country))).sort((a, b) => {
     if (a === UNREPORTED_COUNTRY) return -1
     if (b === UNREPORTED_COUNTRY) return 1
     return a.localeCompare(b)
   })
+
+  const years = []
+  for (let y = YEAR_START; y <= YEAR_END; y++) years.push(y)
 
   const stackRows = years.map((year) => {
     const entry = { year }
@@ -143,8 +220,37 @@ function drawChart() {
 
   const svgHeight = margin.top + plotHeight + margin.bottom
 
+  svg.selectAll('.clip-reveal-top, .clip-reveal-bottom').interrupt()
+  svg.selectAll('*').interrupt()
+  revealInProgress = false
+
   svg.attr('width', width).attr('height', svgHeight)
   svg.selectAll('*').remove()
+
+  if (!streamsRevealDone) {
+    const defs = svg.append('defs')
+    defs
+      .append('clipPath')
+      .attr('id', STREAM_CLIP_PANEL_TOP)
+      .attr('clipPathUnits', 'userSpaceOnUse')
+      .append('rect')
+      .attr('class', 'clip-reveal-top')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', 0)
+      .attr('height', hTop)
+
+    defs
+      .append('clipPath')
+      .attr('id', STREAM_CLIP_PANEL_BOTTOM)
+      .attr('clipPathUnits', 'userSpaceOnUse')
+      .append('rect')
+      .attr('class', 'clip-reveal-bottom')
+      .attr('x', 0)
+      .attr('y', 0)
+      .attr('width', 0)
+      .attr('height', hBottom)
+  }
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -157,7 +263,7 @@ function drawChart() {
 
   const stackedMax = max(layers, (series) => max(series, (point) => point[1])) ?? 1
   const maxY = Math.max(1, stackedMax * 1.5)
-  const xScale = scaleLinear().domain([years[0], years[years.length - 1]]).range([0, innerWidth])
+  const xScale = scaleLinear().domain([YEAR_START, YEAR_END]).range([0, innerWidth])
   const yScaleTop = scaleLinear().domain([0, maxY]).range([hTop, 0])
 
   const aquaStackGen = stack().keys(SERIES_KEYS).offset(stackOffsetExpand)
@@ -233,7 +339,7 @@ function drawChart() {
   function clampYearFromEvent(event) {
     const [mouseX] = pointer(event, g.node())
     const domainYear = Math.round(xScale.invert(mouseX))
-    return Math.min(Math.max(domainYear, years[0]), years[years.length - 1])
+    return Math.min(Math.max(domainYear, YEAR_START), YEAR_END)
   }
 
   function updateHoverLine(event) {
@@ -280,7 +386,12 @@ function drawChart() {
     tooltipEl.style.top = `${event.offsetY + 14}px`
   }
 
-  gTop
+  const streamsShellTop = gTop
+    .append('g')
+    .attr('class', 'streams-shell-top')
+    .attr('clip-path', streamsRevealDone ? null : `url(#${STREAM_CLIP_PANEL_TOP})`)
+
+  streamsShellTop
     .selectAll('.stream.stream-top')
     .data(layers)
     .join('path')
@@ -302,7 +413,12 @@ function drawChart() {
       hideHoverLine()
     })
 
-  gAqua
+  const streamsShellAqua = gAqua
+    .append('g')
+    .attr('class', 'streams-shell-aqua')
+    .attr('clip-path', streamsRevealDone ? null : `url(#${STREAM_CLIP_PANEL_BOTTOM})`)
+
+  streamsShellAqua
     .selectAll('.stream.stream-aqua')
     .data(aquaLayers)
     .join('path')
@@ -366,6 +482,9 @@ function drawChart() {
   hoverLabel.raise()
 
   updateTopPanelContinentHighlight()
+
+  lastRevealInnerWidth = innerWidth
+  maybeStartStreamReveal()
 }
 
 function toggleLegendContinent(continent) {
@@ -385,9 +504,34 @@ onMounted(() => {
 
   resizeObserver = new ResizeObserver(() => drawChart())
   resizeObserver.observe(host)
+
+  nextTick(() => {
+    const wrap = wrapRef.value
+    maybeStartStreamReveal()
+
+    if (!wrap || typeof IntersectionObserver === 'undefined') {
+      return
+    }
+
+    intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        maybeStartStreamReveal(entry)
+      },
+      {
+        root: null,
+        rootMargin: '0px',
+        threshold: [0, 0.12, REVEAL_START_INTERSECTION, 0.45, 0.7, 1],
+      },
+    )
+    intersectionObserver.observe(wrap)
+  })
 })
 
 onUnmounted(() => {
+  intersectionObserver?.disconnect()
+  intersectionObserver = undefined
   resizeObserver?.disconnect()
   resizeObserver = null
   svg?.remove()
@@ -396,7 +540,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="streamgraph-wrap">
+  <div ref="wrapRef" class="streamgraph-wrap">
     <div class="country-legend" role="toolbar" aria-label="Catch by continent color group">
       <button
         v-for="c in CONTINENT_ORDER"

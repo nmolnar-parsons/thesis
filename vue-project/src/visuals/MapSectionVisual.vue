@@ -4,12 +4,10 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import tunaCatchData5degUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
 import tunaCatchData5degRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
-/** 1° grid (~28 MB): Mediterranean/Baja zoom only; URL for Mapbox + async HUD totals. */
-import tunaCatchData1degUrl from '../data/tuna_data/bluefin-cwp-grid-1deg-catch.geojson?url'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
-/** Mediterranean/Baja: replay years on the fine grid before advancing the story. */
+/** Mediterranean zoom: replay years before advancing the story. */
 const REGION_YEAR_START = 2007
 const REGION_YEAR_END = 2023
 const DEFAULT_PROJECTION = 'winkelTripel'
@@ -45,31 +43,31 @@ const STEP_YEAR_FULLVIEW_END = 4
 /** Full global view, year already at 2023; extra scroll beats before regional zoom. */
 const STEP_FULLVIEW_LINGER_START = 5
 const STEP_FULLVIEW_LINGER_END = 8
+/** Mediterranean zoom: year scrub, then basin annotation + linger at 2023. */
 const STEP_MEDITERRANEAN = 9
-const STEP_MEDITERRANEAN_LINGER = 10
-/** Mediterranean camera + circle callout (two scroll beats before annotation). */
-const STEP_MEDITERRANEAN_ANNOTATION = 11
-const STEP_BAJA = 12
-/** Baja narrative 2 + circle callout (mirrors Mediterranean annotation step). */
-const STEP_BAJA_ANNOTATION = 13
-/** Global return + trailing scroll padding (indices 14–16 → m15–m17). */
-const STEP_RETURN_FULL = 14
+/** Last step where the regional year advances (then 2023 through callout + linger). */
+const STEP_MEDITERRANEAN_YEAR_END = 11
+/** First step showing the basin ellipse; stays visible through linger steps. */
+const STEP_MEDITERRANEAN_CALLOUT_START = 12
+/** Extra pacing on Med at 2023 while the ellipse remains (mirrors global linger). */
+const STEP_MEDITERRANEAN_LINGER_START = 13
+const STEP_MEDITERRANEAN_LINGER_END = 16
+/** Last Med-framed scroll step before easing back to global. */
+const STEP_MEDITERRANEAN_END = STEP_MEDITERRANEAN_LINGER_END
+/** Global return + trailing scroll padding (indices 17–19 → m18–m20). */
+const STEP_RETURN_FULL = 17
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
   /** Scrollama progress through the current step, roughly 0–1. */
   stepProgress: { type: Number, default: 0 },
-  stepCount: { type: Number, default: 17 },
+  stepCount: { type: Number, default: 20 },
 })
 
 const MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION =
   'Med Filler'
 const MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION =
   'Med Filler Anno'
-const BAJA_NARRATIVE_BEFORE_ANNOTATION =
-  'Baja Filler'
-const BAJA_NARRATIVE_WITH_ANNOTATION =
-  'Baja Filler Anno'
 const LINGER_2023_FILLER = 'filler for 2023 linger'
 const DEFAULT_FILLER = 'default filler'
 
@@ -79,31 +77,17 @@ const tokenMissing = ref(false)
 let map = null
 let resizeObserver = null
 let activeCameraKey = ''
-/** Avoid redundant GeoJSON `setData` when resolution matches. */
-let lastLoadedTunaDataUrl = ''
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, v))
 }
 
-const usingHighResData = computed(
-  () =>
-    (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep <= STEP_MEDITERRANEAN_ANNOTATION)
-    || (props.activeStep >= STEP_BAJA && props.activeStep <= STEP_BAJA_ANNOTATION),
-)
-
 const currentYear = computed(() => {
   const step = props.activeStep
   const prog = props.stepProgress
-  if (step >= STEP_MEDITERRANEAN && step <= STEP_MEDITERRANEAN_ANNOTATION) {
-    const nSteps = STEP_MEDITERRANEAN_ANNOTATION - STEP_MEDITERRANEAN + 1
+  if (step >= STEP_MEDITERRANEAN && step <= STEP_MEDITERRANEAN_YEAR_END) {
+    const nSteps = STEP_MEDITERRANEAN_YEAR_END - STEP_MEDITERRANEAN + 1
     const t = clamp01((step - STEP_MEDITERRANEAN + prog) / nSteps)
-    const spanY = REGION_YEAR_END - REGION_YEAR_START
-    return Math.min(REGION_YEAR_END, Math.max(REGION_YEAR_START, Math.round(REGION_YEAR_START + t * spanY)))
-  }
-  if (step >= STEP_BAJA && step <= STEP_BAJA_ANNOTATION) {
-    const nSteps = STEP_BAJA_ANNOTATION - STEP_BAJA + 1
-    const t = clamp01((step - STEP_BAJA + prog) / nSteps)
     const spanY = REGION_YEAR_END - REGION_YEAR_START
     return Math.min(REGION_YEAR_END, Math.max(REGION_YEAR_START, Math.round(REGION_YEAR_START + t * spanY)))
   }
@@ -117,14 +101,6 @@ const currentYear = computed(() => {
   const span = YEAR_END - YEAR_START
   return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(YEAR_START + yearT * span)))
 })
-
-function buildEmptyYearlyTonnesOnly() {
-  const yearly = new Map()
-  for (let y = YEAR_START; y <= YEAR_END; y += 1) {
-    yearly.set(y, { tonnes: 0 })
-  }
-  return yearly
-}
 
 function parseYearlyTotals5deg() {
   const empty = new Map()
@@ -154,41 +130,7 @@ function parseYearlyTotals5deg() {
 
 const yearlyTotals5deg = parseYearlyTotals5deg()
 
-/** 1° GeoJSON has `tonne_*` only; fish count for HUD is derived from tonnes. */
-function aggregateYearlyTonnesFromFeatures(features) {
-  const yearly = buildEmptyYearlyTonnesOnly()
-  if (!Array.isArray(features)) return yearly
-  for (const feature of features) {
-    const fp = feature?.properties || {}
-    for (let y = YEAR_START; y <= YEAR_END; y += 1) {
-      const raw = fp[`tonne_${y}`]
-      const tonnes = raw == null || raw === '' ? 0 : Number(raw) || 0
-      yearly.get(y).tonnes += tonnes
-    }
-  }
-  return yearly
-}
-
-const yearlyTotals1deg = ref(buildEmptyYearlyTonnesOnly())
-
-async function loadYearlyTotals1degFromUrl() {
-  try {
-    const res = await fetch(tunaCatchData1degUrl)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const parsed = await res.json()
-    yearlyTotals1deg.value = aggregateYearlyTonnesFromFeatures(parsed?.features)
-  } catch (error) {
-    console.warn('MapSectionVisual: failed to load 1deg yearly totals.', error)
-  }
-}
-
 const countRange = computed(() => {
-  if (usingHighResData.value) {
-    const values = Array.from(yearlyTotals1deg.value.values(), (d) => Math.round(d.tonnes / COUNT_TO_TONNE))
-    const min = Math.min(...values, 0)
-    const max = Math.max(...values, 1)
-    return { min, max }
-  }
   const values = Array.from(yearlyTotals5deg.values(), (d) => d.count)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 1)
@@ -196,12 +138,6 @@ const countRange = computed(() => {
 })
 
 const tonnesRange = computed(() => {
-  if (usingHighResData.value) {
-    const values = Array.from(yearlyTotals1deg.value.values(), (d) => d.tonnes)
-    const min = Math.min(...values, 0)
-    const max = Math.max(...values, 1)
-    return { min, max }
-  }
   const values = Array.from(yearlyTotals5deg.values(), (d) => d.tonnes + d.count * COUNT_TO_TONNE)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 1)
@@ -210,10 +146,6 @@ const tonnesRange = computed(() => {
 
 const currentYearTotals = computed(() => {
   const cy = currentYear.value
-  if (usingHighResData.value) {
-    const tonnes = yearlyTotals1deg.value.get(cy)?.tonnes ?? 0
-    return { totalCount: Math.round(tonnes / COUNT_TO_TONNE), totalTonnes: tonnes }
-  }
   const entry = yearlyTotals5deg.get(cy) || { count: 0, tonnes: 0 }
   const totalCount = entry.count
   const totalTonnes = entry.tonnes + totalCount * COUNT_TO_TONNE
@@ -245,17 +177,17 @@ const narrativeCopy = computed(() => {
   if (props.activeStep >= STEP_FULLVIEW_LINGER_START && props.activeStep <= STEP_FULLVIEW_LINGER_END) {
     return LINGER_2023_FILLER
   }
-  if (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep < STEP_MEDITERRANEAN_ANNOTATION) {
+  if (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep <= STEP_MEDITERRANEAN_YEAR_END) {
     return MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION
   }
-  if (props.activeStep === STEP_MEDITERRANEAN_ANNOTATION) {
+  if (props.activeStep === STEP_MEDITERRANEAN_CALLOUT_START) {
     return MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION
   }
-  if (props.activeStep === STEP_BAJA) {
-    return BAJA_NARRATIVE_BEFORE_ANNOTATION
-  }
-  if (props.activeStep === STEP_BAJA_ANNOTATION) {
-    return BAJA_NARRATIVE_WITH_ANNOTATION
+  if (
+    props.activeStep >= STEP_MEDITERRANEAN_LINGER_START
+    && props.activeStep <= STEP_MEDITERRANEAN_LINGER_END
+  ) {
+    return LINGER_2023_FILLER
   }
   if (props.activeStep >= STEP_RETURN_FULL) {
     return 'Regional hotspots are intensifying while the full ocean picture continues to change.'
@@ -263,14 +195,10 @@ const narrativeCopy = computed(() => {
   return DEFAULT_FILLER
 })
 
-function overlayOpacity(region) {
-  if (region === 'mediterranean') {
-    return props.activeStep === STEP_MEDITERRANEAN_ANNOTATION ? 1 : 0
-  }
-  if (region === 'baja') {
-    return props.activeStep === STEP_BAJA_ANNOTATION ? 1 : 0
-  }
-  return 0
+function overlayOpacity() {
+  return props.activeStep >= STEP_MEDITERRANEAN_CALLOUT_START && props.activeStep <= STEP_MEDITERRANEAN_END
+    ? 1
+    : 0
 }
 
 function formatCount(v) {
@@ -283,32 +211,13 @@ function formatTonnes(v) {
 
 const tunaColorExpression = computed(() => {
   const y = currentYear.value
-  const combinedTonnes = usingHighResData.value
-    ? ['coalesce', ['get', `tonne_${y}`], 0]
-    : [
-        '+',
-        ['coalesce', ['get', `tonne_${y}`], 0],
-        ['*', COUNT_TO_TONNE, ['coalesce', ['get', `count_${y}`], 0]],
-      ]
+  const combinedTonnes = [
+    '+',
+    ['coalesce', ['get', `tonne_${y}`], 0],
+    ['*', COUNT_TO_TONNE, ['coalesce', ['get', `count_${y}`], 0]],
+  ]
   return buildCatchTonnesStepExpression(combinedTonnes)
 })
-
-function syncTunaCatchSourceToResolution() {
-  if (!map || !mapReady.value) return
-  const src = map.getSource('tuna-catch')
-  if (!src || typeof src.setData !== 'function') return
-  const nextUrl = usingHighResData.value ? tunaCatchData1degUrl : tunaCatchData5degUrl
-  if (nextUrl === lastLoadedTunaDataUrl) {
-    updateCatchLayer()
-    return
-  }
-  lastLoadedTunaDataUrl = nextUrl
-  src.setData(nextUrl)
-  map.once('idle', () => {
-    applyTunaCatchFillSeamMitigation()
-    updateCatchLayer()
-  })
-}
 
 function hideMapLabels() {
   if (!map || !mapReady.value) return
@@ -354,10 +263,7 @@ function cameraForStep(stepIndex) {
   const cameraPadding = window.innerWidth < 900
     ? { top: 24, right: 24, bottom: 24, left: 64 }
     : { top: 24, right: 40, bottom: 24, left: 220 }
-  if (stepIndex >= STEP_BAJA && stepIndex <= STEP_BAJA_ANNOTATION) {
-    return { key: 'baja', center: [-114.5, 27.6], zoom: 3.5, duration: 2600, padding: cameraPadding }
-  }
-  if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_ANNOTATION) {
+  if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_END) {
     return { key: 'mediterranean', center: [14, 38], zoom: 4.35, duration: 2600, padding: cameraPadding }
   }
   return { key: 'global', center: [0, 0], zoom: 1.25, duration: 2600, padding: cameraPadding }
@@ -379,8 +285,6 @@ function updateCameraForStep(stepIndex, force = false) {
 }
 
 onMounted(() => {
-  loadYearlyTotals1degFromUrl()
-
   if (!mapRef.value) return
 
   const mapboxToken = (
@@ -405,7 +309,6 @@ onMounted(() => {
   })
 
   map.on('load', () => {
-    lastLoadedTunaDataUrl = tunaCatchData5degUrl
     map.addSource('tuna-catch', {
       type: 'geojson',
       data: tunaCatchData5degUrl,
@@ -442,7 +345,7 @@ onMounted(() => {
     setProjection()
     neutralizeWaterColor()
     applyTunaCatchFillSeamMitigation()
-    syncTunaCatchSourceToResolution()
+    updateCatchLayer()
     updateCameraForStep(props.activeStep, true)
   })
 
@@ -465,16 +368,11 @@ watch(currentYear, () => {
   updateCatchLayer()
 })
 
-watch(usingHighResData, () => {
-  syncTunaCatchSourceToResolution()
-})
-
 onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
   if (map) map.remove()
   map = null
-  lastLoadedTunaDataUrl = ''
 })
 </script>
 
@@ -502,13 +400,13 @@ onUnmounted(() => {
     </div>
 
     <div class="callout-layer">
-      <div class="region-callout mediterranean-callout" :style="{ opacity: overlayOpacity('mediterranean') }">
-        <div class="callout-circle"></div>
-        <p class="callout-label">warming quickly!</p>
-      </div>
-      <div class="region-callout baja-callout" :style="{ opacity: overlayOpacity('baja') }">
-        <div class="callout-circle"></div>
-        <p class="callout-label">warming quickly!</p>
+      <div
+        class="region-callout mediterranean-callout"
+        aria-hidden="true"
+        :style="{ opacity: overlayOpacity() }"
+      >
+        <div class="callout-shape mediterranean-basin-shape" />
+        <p class="callout-label mediterranean-callout-label">warming quickly!</p>
       </div>
     </div>
 
@@ -596,29 +494,31 @@ onUnmounted(() => {
 
 .region-callout {
   position: absolute;
-  width: 16vmin;
-  min-width: 120px;
-  max-width: 210px;
-  aspect-ratio: 1 / 1;
-  transform: translate(-50%, -50%);
+  pointer-events: none;
   transition: opacity 520ms ease;
 }
 
 .mediterranean-callout {
-  left: 46%;
+  left: 50%;
   top: 44%;
+  width: min(118vmin, calc(100% - 2.5rem));
+  height: min(88vmin, calc(92% - 3rem));
+  min-height: clamp(260px, 52vh, 720px);
+  transform: translate(-50%, -50%);
 }
 
-.baja-callout {
-  left: 26%;
-  top: 44%;
-}
-
-.callout-circle {
+.callout-shape {
   width: 100%;
   height: 100%;
-  border: 4px solid rgba(220, 38, 38, 0.88);
-  border-radius: 999px;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+
+.mediterranean-basin-shape {
+  border: 3px solid rgba(220, 38, 38, 0.82);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16) inset,
+    0 0 24px rgba(220, 38, 38, 0.18);
 }
 
 .callout-label {
@@ -631,6 +531,27 @@ onUnmounted(() => {
   font-weight: 700;
   transform: rotate(20deg);
   text-transform: lowercase;
+}
+
+.mediterranean-callout-label {
+  top: clamp(0.75rem, 3.5vmin, 1.5rem);
+  right: clamp(0.65rem, 3vmin, 1.85rem);
+  transform: rotate(17deg);
+}
+
+@media (max-width: 900px) {
+  .mediterranean-callout {
+    width: min(130vmin, calc(100% - 2rem));
+    height: min(92vmin, calc(94% - 4rem));
+    top: 45%;
+    min-height: clamp(240px, 48vh, 560px);
+  }
+
+  .mediterranean-callout-label {
+    top: clamp(0.5rem, 2vmin, 1.1rem);
+    right: clamp(0.45rem, 2vmin, 1.2rem);
+    font-size: clamp(0.75rem, 2.85vw, 0.92rem);
+  }
 }
 
 .token-warning {
