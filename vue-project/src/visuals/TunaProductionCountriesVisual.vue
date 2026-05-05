@@ -3,6 +3,7 @@ import { max, rollup, sum } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { csvParse } from 'd3-dsv'
 import { easeCubicOut } from 'd3-ease'
+import { format as d3Format } from 'd3-format'
 import { scaleLinear } from 'd3-scale'
 import { pointer, select } from 'd3-selection'
 import { area, stack, stackOffsetExpand } from 'd3-shape'
@@ -18,6 +19,14 @@ import {
   getContinent,
   getCountryColor as stableCountryColor,
 } from './countryContinentColors.js'
+
+const compactNumber = d3Format('~s')
+function formatTickShort(d) {
+  const n = Number(d)
+  if (!Number.isFinite(n)) return ''
+  if (Math.abs(n) < 1000) return compactNumber(n)
+  return compactNumber(n).replace('G', 'B')
+}
 
 const hostRef = ref(null)
 const wrapRef = ref(null)
@@ -117,7 +126,10 @@ const SERIES_LABELS = {
 }
 
 const X_AXIS_BAND = 34
-const PANEL_GAP = 8
+/** Space between top and bottom panels (fits bottom section subtitle). */
+const PANEL_GAP = 28
+/** Height reserved for the top section subtitle above the streamgraph. */
+const SUBTITLE_BAND = 22
 
 function parseProductionData() {
   const rows = csvParse(csvRaw, (d) => ({
@@ -276,14 +288,15 @@ function drawChart() {
   const width = host.clientWidth || 800
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
-  const margin = { top: 28, right: 24, bottom: 48, left: 64 }
+  const margin = { top: 28, right: 34, bottom: 48, left: 84 }
   const innerWidth = width - margin.left - margin.right
   const available = height - margin.top - margin.bottom
   if (innerWidth < 20 || available < 20) return
 
-  const hTop = Math.max(120, ((available - X_AXIS_BAND - PANEL_GAP) * 3) / 4)
+  const availableForPanels = available - SUBTITLE_BAND - X_AXIS_BAND - PANEL_GAP
+  const hTop = Math.max(120, (availableForPanels * 3) / 4)
   const hBottom = Math.max(48, hTop / 3)
-  const plotHeight = hTop + X_AXIS_BAND + PANEL_GAP + hBottom
+  const plotHeight = SUBTITLE_BAND + hTop + PANEL_GAP + hBottom + X_AXIS_BAND
 
   const svgHeight = margin.top + plotHeight + margin.bottom
 
@@ -349,9 +362,34 @@ function drawChart() {
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
-  const gTop = g.append('g').attr('class', 'panel-top')
+  const gTop = g.append('g').attr('class', 'panel-top').attr('transform', `translate(0,${SUBTITLE_BAND})`)
   const gAxisX = g.append('g').attr('class', 'axis axis-x')
-  const gAqua = g.append('g').attr('class', 'panel-aqua').attr('transform', `translate(0,${hTop + X_AXIS_BAND + PANEL_GAP})`)
+  const gAqua = g
+    .append('g')
+    .attr('class', 'panel-aqua')
+    .attr('transform', `translate(0,${SUBTITLE_BAND + hTop + PANEL_GAP})`)
+
+  g.append('text')
+    .attr('class', 'panel-subtitle')
+    .attr('text-anchor', 'start')
+    .attr('x', 0)
+    .attr('y', 14)
+    .text('Bluefin Tuna Production by Country')
+
+  g.append('rect')
+    .attr('class', 'panel-subtitle-bottom-bg')
+    .attr('x', -4)
+    .attr('y', SUBTITLE_BAND + hTop + PANEL_GAP - 20)
+    .attr('width', 178)
+    .attr('height', 18)
+    .attr('rx', 2)
+
+  g.append('text')
+    .attr('class', 'panel-subtitle panel-subtitle-bottom')
+    .attr('text-anchor', 'start')
+    .attr('x', 0)
+    .attr('y', SUBTITLE_BAND + hTop + PANEL_GAP - 8)
+    .text('Wild/Farmed Proportion')
 
   const stackGen = stack().keys(countries)
   const layers = stackGen(stackRows)
@@ -383,14 +421,16 @@ function drawChart() {
     .y0((point) => yScaleAqua(point[0]))
     .y1((point) => yScaleAqua(point[1]))
 
-  const lineEndY = hTop + X_AXIS_BAND + PANEL_GAP + hBottom
+  const lineEndY = SUBTITLE_BAND + hTop + PANEL_GAP + hBottom
+  const hoverLabelY = SUBTITLE_BAND + 12
+  const hoverLineStartY = hoverLabelY + 6
 
   const hoverLine = g
     .append('line')
     .attr('class', 'hover-line')
     .attr('x1', 0)
     .attr('x2', 0)
-    .attr('y1', 0)
+    .attr('y1', hoverLineStartY)
     .attr('y2', lineEndY)
     .style('opacity', 0)
 
@@ -399,7 +439,7 @@ function drawChart() {
     .attr('class', 'hover-line-label')
     .attr('text-anchor', 'middle')
     .attr('x', 0)
-    .attr('y', -5)
+    .attr('y', hoverLabelY)
     .style('opacity', 0)
 
   const tooltipEl = tooltipRef.value
@@ -450,7 +490,7 @@ function drawChart() {
     hoverLine.attr('x1', xPos).attr('x2', xPos).style('opacity', 1)
     hoverLabel
       .attr('x', xPos)
-      .text(`${total.toLocaleString(undefined, { maximumFractionDigits: 1 })} tonnes`)
+      .text(`Total ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} tonnes`)
       .style('opacity', 1)
   }
 
@@ -461,7 +501,7 @@ function drawChart() {
     if (!selected) return
 
     const value = selected[series.key] || 0
-    tooltipEl.innerHTML = `<div class="country">${series.key}</div><div>${clampedYear}: ${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} tonnes</div>`
+    tooltipEl.innerHTML = `<div class="country">${series.key}</div><div>${clampedYear}: ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })} tonnes</div>`
     tooltipEl.style.opacity = '1'
     tooltipEl.style.left = `${event.offsetX + 14}px`
     tooltipEl.style.top = `${event.offsetY + 14}px`
@@ -538,30 +578,34 @@ function drawChart() {
       hideHoverLine()
     })
 
-  gAxisX.attr('transform', `translate(0,${hTop})`).call(axisBottom(xScale).tickFormat((d) => Number(d).toString()))
+  gAxisX
+    .attr('transform', `translate(0,${SUBTITLE_BAND + hTop + PANEL_GAP + hBottom})`)
+    .call(axisBottom(xScale).tickFormat((d) => Number(d).toString()))
 
   gTop.append('g').attr('class', 'axis axis-y').call(
-    axisLeft(yScaleTop).tickFormat((d) => Number(d).toLocaleString(undefined, { maximumFractionDigits: 0 })),
+    axisLeft(yScaleTop)
+      .tickPadding(10)
+      .tickFormat(formatTickShort),
   )
-  gTop.selectAll('.axis-y .tick text').attr('font-size', 10)
 
   gAqua.append('g').attr('class', 'axis axis-y axis-y-aqua').call(
     axisLeft(yScaleAqua)
       .ticks(3)
+      .tickPadding(10)
       .tickFormat((d) => `${Math.round(Number(d) * 100)}%`),
   )
-  gAqua.selectAll('.axis-y-aqua .tick text').attr('font-size', 10)
 
   gTop
     .append('text')
     .attr('class', 'axis-label')
     .attr('text-anchor', 'middle')
     .attr('transform', 'rotate(-90)')
-    .attr('y', -margin.left + 5)
+    .attr('y', -54)
     .attr('x', -hTop / 2)
     .attr('dy', '.32em')
     .attr('fill', '#334155')
-    .attr('font-size', 11)
+    .attr('font-size', 13)
+    .attr('font-family', 'inherit')
     .text('Catch (tonnes)')
 
   gAqua
@@ -569,15 +613,17 @@ function drawChart() {
     .attr('class', 'axis-label axis-label-aqua')
     .attr('text-anchor', 'middle')
     .attr('transform', 'rotate(-90)')
-    .attr('y', -margin.left + 5)
+    .attr('y', -54)
     .attr('x', -hBottom / 2)
     .attr('dy', '.32em')
     .attr('fill', '#334155')
-    .attr('font-size', 11)
-    .text('Wild/Farmed Proportion')
+    .attr('font-size', 13)
+    .attr('font-family', 'inherit')
+    .text('% of production')
 
   hoverLine.raise()
   hoverLabel.raise()
+  g.selectAll('.panel-subtitle-bottom-bg, .panel-subtitle-bottom').raise()
 
   updateTopPanelContinentHighlight()
 
@@ -717,7 +763,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
+  font-family: inherit;
   color: #0f172a;
   cursor: pointer;
   transition: opacity 0.18s ease;
@@ -762,7 +809,8 @@ onUnmounted(() => {
 
 .streamgraph-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  font-family: inherit;
 }
 
 .streamgraph-wrap :deep(.axis path),
@@ -798,9 +846,19 @@ onUnmounted(() => {
 
 .streamgraph-wrap :deep(.hover-line) {
   stroke: #334155;
-  stroke-width: 1.2;
-  stroke-dasharray: 4 4;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
   pointer-events: none;
+}
+
+.streamgraph-wrap :deep(.panel-subtitle) {
+  fill: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.streamgraph-wrap :deep(.panel-subtitle-bottom-bg) {
+  fill: #ffffff;
 }
 
 .streamgraph-wrap :deep(.hover-line-label) {

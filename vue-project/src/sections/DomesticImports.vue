@@ -2,7 +2,7 @@
 import CopyBlock from '../components/layout/CopyBlock.vue'
 import SectionGrid from '../components/layout/SectionGrid.vue'
 import StorySection from '../components/story/StorySection.vue'
-import TunaDomesticImportsDistrictsVisual from '../visuals/TunaDomesticImportsDistrictsVisual.vue'
+import DistrictDonutsVisual from '../visuals/DistrictDonutsVisual.vue'
 </script>
 
 <template>
@@ -16,7 +16,7 @@ import TunaDomesticImportsDistrictsVisual from '../visuals/TunaDomesticImportsDi
         </CopyBlock>
       </div>
       <div class="domestic-visual">
-        <TunaDomesticImportsDistrictsVisual />
+        <DistrictDonutsVisual />
       </div>
     </SectionGrid>
   </StorySection>

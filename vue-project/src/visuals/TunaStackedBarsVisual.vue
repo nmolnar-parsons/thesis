@@ -1,10 +1,19 @@
 <script setup>
 import { axisBottom, axisLeft } from 'd3-axis'
+import { format as d3Format } from 'd3-format'
 import { scaleBand, scaleLinear } from 'd3-scale'
 import { select } from 'd3-selection'
 import { transition } from 'd3-transition'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_grouped.csv?raw'
+
+const compactNumber = d3Format('~s')
+function formatTickShort(d) {
+  const n = Number(d)
+  if (!Number.isFinite(n)) return ''
+  if (Math.abs(n) < 1000) return compactNumber(n)
+  return compactNumber(n).replace('G', 'B')
+}
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
@@ -237,7 +246,7 @@ function drawChart() {
   const width = el.clientWidth || 800
   const height = el.clientHeight || 480
   if (width < 20 || height < 20) return
-  const margin = { top: 48, right: 24, bottom: 48, left: 62 }
+  const margin = { top: 48, right: 34, bottom: 48, left: 84 }
   const innerW = width - margin.left - margin.right
   const innerH = height - margin.top - margin.bottom
   if (innerW < 20 || innerH < 20) return
@@ -323,8 +332,8 @@ function drawChart() {
   let gMain = svg.select('g.main')
   if (gMain.empty()) {
     gMain = svg.append('g').attr('class', 'main')
-    gMain.append('g').attr('class', 'x-axis')
-    gMain.append('g').attr('class', 'y-axis')
+    gMain.append('g').attr('class', 'x-axis axis')
+    gMain.append('g').attr('class', 'y-axis axis')
     gMain.append('text').attr('class', 'y-axis-label')
     gMain.append('g').attr('class', 'hover-guides')
     gMain.append('g').attr('class', 'bars')
@@ -338,26 +347,27 @@ function drawChart() {
   gx.attr('transform', `translate(0,${innerH})`).call(
     axisBottom(xScale).tickValues(decadeTicks).tickSizeOuter(0),
   )
-  gx.selectAll('text').attr('font-size', 10).attr('transform', 'rotate(-35)').style('text-anchor', 'end')
+  gx.selectAll('text').attr('font-size', 11).attr('transform', null).style('text-anchor', 'middle')
 
   const gy = gMain.select('g.y-axis')
   const yAxisFn = axisLeft(yScale)
     .ticks(6)
-    .tickFormat((d) => Number(d).toLocaleString(undefined, { maximumFractionDigits: 0 }))
+    .tickPadding(10)
+    .tickFormat(formatTickShort)
     .tickSizeOuter(0)
   if (introPrimed.value && stepChanged) {
     gy.transition(t).call(yAxisFn)
   } else {
     gy.call(yAxisFn)
   }
-  gy.selectAll('.tick text').attr('font-size', 10)
 
   gMain
     .select('text.y-axis-label')
     .attr('text-anchor', 'middle')
-    .attr('transform', `translate(${-46}, ${innerH / 2}) rotate(-90)`)
+    .attr('transform', `translate(${-54}, ${innerH / 2}) rotate(-90)`)
     .attr('fill', '#334155')
-    .attr('font-size', 11)
+    .attr('font-size', 13)
+    .attr('font-family', 'inherit')
     .text('global tuna catch (tonnes)')
 
   const gHoverGuides = gMain.select('g.hover-guides')
@@ -414,7 +424,7 @@ function drawChart() {
     hoverLine.attr('x1', x).attr('x2', x).attr('y2', innerH).style('opacity', 1)
     hoverLabel
       .attr('x', x)
-      .text(`${year}: ${total.toLocaleString(undefined, { maximumFractionDigits: 1 })} tonnes`)
+      .text(`${year}: ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} tonnes`)
       .style('opacity', 1)
   }
 
@@ -634,8 +644,8 @@ onUnmounted(() => {
 
 .stacked-wrap :deep(.hover-line) {
   stroke: #334155;
-  stroke-width: 1.2;
-  stroke-dasharray: 4 4;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
   pointer-events: none;
 }
 
@@ -684,9 +694,21 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
+  font-family: inherit;
   color: #0f172a;
   line-height: 1.25;
+}
+
+.stacked-wrap :deep(.axis text) {
+  fill: #475569;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
+.stacked-wrap :deep(.axis path),
+.stacked-wrap :deep(.axis line) {
+  stroke: #94a3b8;
 }
 
 .swatch {

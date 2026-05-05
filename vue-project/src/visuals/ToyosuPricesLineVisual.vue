@@ -157,7 +157,7 @@ function drawChart() {
   const width = host.clientWidth || 860
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
-  const margin = { top: 34, right: 24, bottom: 46, left: 72 }
+  const margin = { top: 34, right: 34, bottom: 46, left: 84 }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
   if (innerWidth < 20 || innerHeight < 20) return
@@ -182,7 +182,7 @@ function drawChart() {
     .attr('class', 'hover-line')
     .attr('x1', 0)
     .attr('x2', 0)
-    .attr('y1', 0)
+    .attr('y1', 20)
     .attr('y2', innerHeight)
     .style('opacity', 0)
 
@@ -190,7 +190,7 @@ function drawChart() {
     .append('text')
     .attr('class', 'hover-line-label')
     .attr('x', 0)
-    .attr('y', -8)
+    .attr('y', 14)
     .attr('text-anchor', 'middle')
     .style('opacity', 0)
 
@@ -205,7 +205,12 @@ function drawChart() {
 
   g.append('g')
     .attr('class', 'axis axis-y')
-    .call(axisLeft(yScale).ticks(7).tickFormat((d) => `¥${Number(d).toLocaleString()}`))
+    .call(
+      axisLeft(yScale)
+        .ticks(7)
+        .tickPadding(10)
+        .tickFormat((d) => Number(d).toLocaleString()),
+    )
 
   g.append('text')
     .attr('class', 'axis-label')
@@ -256,7 +261,7 @@ function drawChart() {
       updateHoverLine(event)
       if (!tooltipEl) return
       tooltipEl.style.opacity = '1'
-      tooltipEl.textContent = d.label
+      tooltipEl.textContent = d.itemName
       tooltipEl.style.left = `${event.offsetX + 12}px`
       tooltipEl.style.top = `${event.offsetY + 12}px`
     })
@@ -264,12 +269,7 @@ function drawChart() {
       if (!lockedSeriesId.value) setActiveSeries(d.id)
       updateHoverLine(event)
       if (!tooltipEl) return
-      const [x] = pointer(event, g.node())
-      const year = Math.round(xScale.invert(x))
-      const point = nearestPointByYear(d.points, year)
-      tooltipEl.textContent = `${point?.year ?? year} · ${d.label} · ¥${Math.round(
-        point?.value || 0,
-      ).toLocaleString()}`
+      tooltipEl.textContent = d.itemName
       tooltipEl.style.left = `${event.offsetX + 12}px`
       tooltipEl.style.top = `${event.offsetY + 12}px`
     })
@@ -312,7 +312,7 @@ function drawChart() {
     const bluefinMid = chartState.bluefinMidByYear.get(year)
     hoverLabel
       .attr('x', xPos)
-      .text(`¥${Math.round(bluefinMid || 0).toLocaleString()}`)
+      .text(`Bluefin: ${Math.round(bluefinMid || 0).toLocaleString()}/kg in ${year}`)
       .style('opacity', Number.isFinite(bluefinMid) ? 1 : 0)
   }
 
@@ -325,16 +325,6 @@ function drawChart() {
     clearActiveSeries()
   }
 }
-
-function nearestPointByYear(points, year) {
-  if (!points.length) return null
-  let nearest = points[0]
-  for (const point of points) {
-    if (Math.abs(point.year - year) < Math.abs(nearest.year - year)) nearest = point
-  }
-  return nearest
-}
-
 function setActiveSeries(seriesId) {
   if (!svg) return
   const root = select(svg.node().parentNode)
@@ -467,7 +457,8 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  font-family: inherit;
 }
 
 .linechart-wrap :deep(.axis path),
@@ -477,7 +468,8 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.axis-label) {
   fill: #334155;
-  font-size: 0.74rem;
+  font-size: 0.86rem;
+  font-family: inherit;
 }
 
 .linechart-wrap :deep(.series-line) {
@@ -500,8 +492,8 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.hover-line) {
   stroke: #334155;
-  stroke-width: 1.2;
-  stroke-dasharray: 4 4;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
   pointer-events: none;
 }
 
@@ -546,7 +538,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
+  font-family: inherit;
   color: #0f172a;
   cursor: pointer;
   transition: opacity 0.18s ease;
