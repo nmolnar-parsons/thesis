@@ -62,6 +62,7 @@ const steps = [
           <CopyBlock v-if="!minimalMode" :title="step.title">
             <p style="white-space: pre-line">{{ step.text }}</p>
           </CopyBlock>
+          <span v-else class="stacked-bars-step-slot" aria-hidden="true" />
         </template>
       </PinnedScrollSection>
     </div>
@@ -75,6 +76,15 @@ const steps = [
 
 .stacked-bars-lead {
   min-height: clamp(5rem, 26vh, 16rem);
+  pointer-events: none;
+}
+
+.stacked-bars-step-slot {
+  display: block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
   pointer-events: none;
 }
 

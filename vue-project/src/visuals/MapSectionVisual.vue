@@ -10,7 +10,7 @@ const YEAR_END = 2023
 /** Mediterranean zoom: replay years before advancing the story. */
 const REGION_YEAR_START = 2007
 const REGION_YEAR_END = 2023
-const DEFAULT_PROJECTION = 'winkelTripel'
+const DEFAULT_PROJECTION = 'naturalEarth'
 /** 250 kg per bluefin on average; convert head-count to metric tonnes. */
 const COUNT_TO_TONNE = 250 / 1000
 /** Lowest tier on catch scale (tonnes = 0): base “ocean” fill. */
@@ -62,6 +62,7 @@ const props = defineProps({
   /** Scrollama progress through the current step, roughly 0–1. */
   stepProgress: { type: Number, default: 0 },
   stepCount: { type: Number, default: 20 },
+  minimalMode: { type: Boolean, default: false },
 })
 
 const MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION =
@@ -137,19 +138,11 @@ const countRange = computed(() => {
   return { min, max }
 })
 
-const tonnesRange = computed(() => {
-  const values = Array.from(yearlyTotals5deg.values(), (d) => d.tonnes + d.count * COUNT_TO_TONNE)
-  const min = Math.min(...values, 0)
-  const max = Math.max(...values, 1)
-  return { min, max }
-})
-
 const currentYearTotals = computed(() => {
   const cy = currentYear.value
   const entry = yearlyTotals5deg.get(cy) || { count: 0, tonnes: 0 }
   const totalCount = entry.count
-  const totalTonnes = entry.tonnes + totalCount * COUNT_TO_TONNE
-  return { totalCount, totalTonnes }
+  return { totalCount }
 })
 
 function normalize(value, min, max) {
@@ -165,11 +158,6 @@ function colorByIntensity(intensity) {
 
 const countNumberColor = computed(() => {
   const t = normalize(currentYearTotals.value.totalCount, countRange.value.min, countRange.value.max)
-  return colorByIntensity(t)
-})
-
-const tonnesNumberColor = computed(() => {
-  const t = normalize(currentYearTotals.value.totalTonnes, tonnesRange.value.min, tonnesRange.value.max)
   return colorByIntensity(t)
 })
 
@@ -203,10 +191,6 @@ function overlayOpacity() {
 
 function formatCount(v) {
   return Math.round(v).toLocaleString()
-}
-
-function formatTonnes(v) {
-  return v.toLocaleString(undefined, { maximumFractionDigits: 1 })
 }
 
 const tunaColorExpression = computed(() => {
@@ -260,9 +244,11 @@ function applyTunaCatchFillSeamMitigation() {
 }
 
 function cameraForStep(stepIndex) {
-  const cameraPadding = window.innerWidth < 900
-    ? { top: 24, right: 24, bottom: 24, left: 64 }
-    : { top: 24, right: 40, bottom: 24, left: 220 }
+  const cameraPadding = props.minimalMode
+    ? { top: 24, right: 24, bottom: 24, left: 24 }
+    : window.innerWidth < 900
+      ? { top: 24, right: 24, bottom: 24, left: 64 }
+      : { top: 24, right: 40, bottom: 24, left: 220 }
   if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_END) {
     return { key: 'mediterranean', center: [14, 38], zoom: 4.35, duration: 2600, padding: cameraPadding }
   }
@@ -383,19 +369,15 @@ onUnmounted(() => {
     <div class="hud-row">
       <div class="metrics-card">
         <p class="year-text">{{ currentYear }}</p>
-        <p class="metric-line">
+        <p v-if="!minimalMode" class="metric-line">
           <span class="metric-caption">Total fish caught:</span>
           <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
         </p>
-        <p class="metric-line">
-          <span class="metric-caption">Total catch:</span>
-          <span class="metric-value" :style="{ color: tonnesNumberColor }">{{ formatTonnes(currentYearTotals.totalTonnes) }} tonnes</span>
-        </p>
-        <p class="metric-line metric-line-temp">
+        <p v-if="!minimalMode" class="metric-line metric-line-temp">
           <span class="metric-caption">Global ocean temperature:</span>
           <span>—</span>
         </p>
-        <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
+        <p v-if="!minimalMode && narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
       </div>
     </div>
 

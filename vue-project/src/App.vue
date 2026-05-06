@@ -36,8 +36,8 @@ onUnmounted(() => {
     <Breakdown :minimal-mode="minimalMode" />
     <ToyosuPrices v-if="!minimalMode" />
     <StackedBars :minimal-mode="minimalMode" />
+    <Map :minimal-mode="minimalMode" />
     <CountryProduction :minimal-mode="minimalMode" />
-    <Map />
     <DomesticImports v-if="!minimalMode" />
     <Ending />
   </main>

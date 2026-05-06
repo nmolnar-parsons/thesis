@@ -3,6 +3,13 @@ import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import MapSectionVisual from '../visuals/MapSectionVisual.vue'
 
+defineProps({
+  minimalMode: {
+    type: Boolean,
+    default: false,
+  },
+})
+
 /** Scroll steps drive `activeStep` only; all copy lives on the map HUD in MapSectionVisual. */
 const steps = [
   // 0–4: year animates 1965 → 2023 (global view)
@@ -40,6 +47,7 @@ const steps = [
           :active-step="graphicProps.activeStep"
           :step-progress="graphicProps.stepProgress"
           :step-count="steps.length"
+          :minimal-mode="minimalMode"
         />
       </template>
       <template #step>
@@ -52,7 +60,7 @@ const steps = [
 
 <style scoped>
 #map :deep(.sticky-graphic) {
-  background: transparent;
+  background: #13265f;
 }
 
 #map :deep(.step-column) {
