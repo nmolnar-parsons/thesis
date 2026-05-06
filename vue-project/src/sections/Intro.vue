@@ -5,6 +5,7 @@ import bluefinStill from '../visuals/intro/bluefin-still.jpg'
 import fishingBoatTuna from '../visuals/intro/fishing-boat-tuna.png'
 import tsukijiAuction from '../visuals/intro/tsukiji-auction.png'
 import tunaNigiri from '../visuals/intro/tuna-nigiri.jpg'
+import tunaNigiriAlt from '../visuals/intro/tuna-nigiri-alt.jpg'
 
 const columns = [
   {
@@ -20,7 +21,7 @@ const columns = [
     alt: 'Rows of tuna laid out at a fish market auction hall',
   },
   {
-    src: tunaNigiri,
+    src: tunaNigiriAlt,
     alt: 'Piece of tuna nigiri sushi on a dark lacquer plate',
   },
 ]

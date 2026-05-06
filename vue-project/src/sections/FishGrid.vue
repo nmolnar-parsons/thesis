@@ -13,27 +13,27 @@ defineProps({
 
 const steps = [
   {
-    id: 'breakdown-single-hold',
+    id: 'fish-grid-single-hold',
     title: 'One fish',
     text: 'A single Pacific bluefin appears at full scale.',
   },
   {
-    id: 'breakdown-single-to-week',
+    id: 'fish-grid-single-to-week',
     title: 'One fish',
     text: 'Zoom out to reveal a week of fish.',
   },
   {
-    id: 'breakdown-week-hold',
+    id: 'fish-grid-week-hold',
     title: 'A week of fish',
     text: "A week of fish remains on screen before the next zoom out.",
   },
   {
-    id: 'breakdown-week-to-year',
+    id: 'fish-grid-week-to-year',
     title: 'A week of fish',
     text: 'Zoom out again to reveal the full year.',
   },
   {
-    id: 'breakdown-year-hold',
+    id: 'fish-grid-year-hold',
     title: 'A year of fish',
     text: 'The full 2023 fish field stays visible.',
   },
@@ -41,7 +41,7 @@ const steps = [
 </script>
 
 <template>
-  <StorySection id="breakdown" height="overscroll" width="full">
+  <StorySection id="fish-grid" height="overscroll" width="full">
     <PinnedScrollSection :steps="steps" :scroll-offset="0.65">
       <template #graphic="graphicProps">
         <BreakdownFishVisual
@@ -53,26 +53,26 @@ const steps = [
         <CopyBlock v-if="!minimalMode" :title="step.title">
           <p>{{ step.text }}</p>
         </CopyBlock>
-        <span v-else class="breakdown-step-slot" aria-hidden="true" />
+        <span v-else class="fish-grid-step-slot" aria-hidden="true" />
       </template>
     </PinnedScrollSection>
   </StorySection>
 </template>
 
 <style scoped>
-#breakdown :deep(.sticky-graphic) {
-  background: #041b46;
+#fish-grid :deep(.sticky-graphic) {
+  background: #13265f;
 }
 
-#breakdown :deep(.scroll-step) {
+#fish-grid :deep(.scroll-step) {
   justify-content: flex-start;
   align-items: flex-start;
   padding-left: clamp(0.75rem, 4vw, 2.5rem);
   padding-right: 55%;
 }
 
-#breakdown :deep(.scroll-step .copy-block),
-#breakdown :deep(.step-card) {
+#fish-grid :deep(.scroll-step .copy-block),
+#fish-grid :deep(.step-card) {
   max-width: min(22rem, 33vw);
   width: 100%;
   background: var(--color-step-card-bg);
@@ -82,17 +82,17 @@ const steps = [
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
 }
 
-#breakdown :deep(.step-column),
-#breakdown :deep(.scroll-step) {
+#fish-grid :deep(.step-column),
+#fish-grid :deep(.scroll-step) {
   pointer-events: none;
 }
 
-#breakdown :deep(.scroll-step .copy-block),
-#breakdown :deep(.step-card) {
+#fish-grid :deep(.scroll-step .copy-block),
+#fish-grid :deep(.step-card) {
   pointer-events: auto;
 }
 
-.breakdown-step-slot {
+.fish-grid-step-slot {
   display: block;
   width: 0;
   height: 0;
@@ -102,12 +102,12 @@ const steps = [
 }
 
 @media (max-width: 980px) {
-  #breakdown :deep(.scroll-step) {
+  #fish-grid :deep(.scroll-step) {
     padding-right: clamp(0.75rem, 6vw, 2rem);
   }
 
-  #breakdown :deep(.scroll-step .copy-block),
-  #breakdown :deep(.step-card) {
+  #fish-grid :deep(.scroll-step .copy-block),
+  #fish-grid :deep(.step-card) {
     max-width: min(32rem, calc(100% - 1.5rem));
   }
 }

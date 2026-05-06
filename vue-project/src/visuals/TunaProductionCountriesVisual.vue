@@ -11,8 +11,6 @@ import 'd3-transition'
 import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
-import tunaJapanImgUrl from './wild-farmed/tuna-japan.jpg?url'
-import fishFarmImgUrl from './wild-farmed/fish-farm.jpg?url'
 import {
   CONTINENT_ORDER,
   continentLegendSwatch,
@@ -217,63 +215,76 @@ function updateTopPanelContinentHighlight() {
   svg.selectAll('.stream.stream-top').classed('inactive', (d) => sel != null && getContinent(d.key) !== sel)
 }
 
-/**
- * Bottom strip textures: same pipeline for wild-capture and aquaculture — panel-sized
- * userSpaceOnUse pattern, center crop via zoom, optional slight Y squash, xMidYMid slice.
- */
-const WILD_JAPAN_CENTER_ZOOM = 1.42
-const WILD_JAPAN_HEIGHT_SQUASH = 0.92
-/** Fish-farm: moderate center zoom (pens across frame); no Y squash keeps rings round. */
-const AQUA_FARM_CENTER_ZOOM = 1
-const AQUA_FARM_HEIGHT_SQUASH = 1
-/** Map one texture across this x-domain (same scale as main year axis, 1965–2022). */
-const AQUA_TEXTURE_YEAR_START = 1987
-const AQUA_TEXTURE_YEAR_END = 2022
-
-function appendBottomStripTexturePattern(
+function appendBottomStripHatchPattern(
   defs,
   id,
-  imageHref,
-  patternWidth,
-  patternHeight,
-  centerZoom,
-  heightSquash,
-  patternX = 0,
-  patternY = 0,
+  tileSize,
+  hatchAngleDeg,
+  hatchSpacing,
+  hatchStroke,
+  hatchStrokeWidth,
+  hatchBackground,
 ) {
-  const w = Math.max(1, patternWidth)
-  const h = Math.max(1, patternHeight)
+  const w = Math.max(8, tileSize)
+  const h = Math.max(8, tileSize)
+  const spacing = Math.max(6, hatchSpacing)
+  const strokeWidth = Math.max(0.7, hatchStrokeWidth)
+  const hatchExtent = (w + h) * 2
+
   const pat = defs
     .append('pattern')
     .attr('id', id)
     .attr('patternUnits', 'userSpaceOnUse')
     .attr('patternContentUnits', 'userSpaceOnUse')
-    .attr('x', patternX)
-    .attr('y', patternY)
+    .attr('x', 0)
+    .attr('y', 0)
+    .attr('width', w)
+    .attr('height', h)
+    .attr('patternTransform', `rotate(${hatchAngleDeg})`)
+
+  pat.append('rect').attr('x', 0).attr('y', 0).attr('width', w).attr('height', h).attr('fill', hatchBackground)
+
+  const lineGroup = pat
+    .append('g')
+    .attr('stroke', hatchStroke)
+    .attr('stroke-width', strokeWidth)
+    .attr('stroke-linecap', 'square')
+
+  for (let offset = -hatchExtent; offset <= hatchExtent; offset += spacing) {
+    lineGroup
+      .append('line')
+      .attr('x1', offset)
+      .attr('y1', h)
+      .attr('x2', offset + h)
+      .attr('y2', 0)
+  }
+}
+
+function appendBottomStripDotPattern(
+  defs,
+  id,
+  tileSize,
+  dotRadius,
+  dotFill,
+  patternBackground,
+) {
+  const w = Math.max(8, tileSize)
+  const h = Math.max(8, tileSize)
+  const r = Math.max(0.8, dotRadius)
+
+  const pat = defs
+    .append('pattern')
+    .attr('id', id)
+    .attr('patternUnits', 'userSpaceOnUse')
+    .attr('patternContentUnits', 'userSpaceOnUse')
+    .attr('x', 0)
+    .attr('y', 0)
     .attr('width', w)
     .attr('height', h)
 
-  const needsYScale =
-    Number.isFinite(heightSquash) && Math.abs(heightSquash - 1) > 1e-6
-  const parent = needsYScale
-    ? pat
-        .append('g')
-        .attr(
-          'transform',
-          `translate(${w / 2} ${h / 2}) scale(1 ${heightSquash}) translate(${-w / 2} ${-h / 2})`,
-        )
-    : pat
-
-  const iw = w * centerZoom
-  const ih = h * centerZoom
-  parent
-    .append('image')
-    .attr('href', imageHref)
-    .attr('x', (w - iw) / 2)
-    .attr('y', (h - ih) / 2)
-    .attr('width', iw)
-    .attr('height', ih)
-    .attr('preserveAspectRatio', 'xMidYMid slice')
+  pat.append('rect').attr('x', 0).attr('y', 0).attr('width', w).attr('height', h).attr('fill', patternBackground)
+  pat.append('circle').attr('cx', w * 0.25).attr('cy', h * 0.25).attr('r', r).attr('fill', dotFill)
+  pat.append('circle').attr('cx', w * 0.75).attr('cy', h * 0.75).attr('r', r).attr('fill', dotFill)
 }
 
 function drawChart() {
@@ -331,33 +342,23 @@ function drawChart() {
       .attr('width', 0)
       .attr('height', hBottom)
   }
-  const yearDomainSpan = YEAR_END - YEAR_START
-  const aquaTexLeft =
-    ((AQUA_TEXTURE_YEAR_START - YEAR_START) / yearDomainSpan) * innerWidth
-  const aquaTexW = Math.max(
-    1,
-    ((AQUA_TEXTURE_YEAR_END - AQUA_TEXTURE_YEAR_START) / yearDomainSpan) * innerWidth,
-  )
-
-  appendBottomStripTexturePattern(
+  appendBottomStripHatchPattern(
     defs,
     PATTERN_WILD_CAPTURE_FILL,
-    tunaJapanImgUrl,
-    innerWidth,
-    hBottom,
-    WILD_JAPAN_CENTER_ZOOM,
-    WILD_JAPAN_HEIGHT_SQUASH,
+    18,
+    -90,
+    9,
+    '#b3bfd1',
+    1.6,
+    '#13265f',
   )
-  appendBottomStripTexturePattern(
+  appendBottomStripDotPattern(
     defs,
     PATTERN_AQUACULTURE_FILL,
-    fishFarmImgUrl,
-    aquaTexW,
-    hBottom,
-    AQUA_FARM_CENTER_ZOOM,
-    AQUA_FARM_HEIGHT_SQUASH,
-    aquaTexLeft,
-    0,
+    16,
+    1.8,
+    '#b3bfd1',
+    '#13265f',
   )
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)

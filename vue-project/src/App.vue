@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import Intro from './sections/Intro.vue'
 import Map from './sections/Map.vue'
-import Breakdown from './sections/Breakdown.vue'
+import FishGrid from './sections/FishGrid.vue'
 import ToyosuPrices from './sections/ToyosuPrices.vue'
 import StackedBars from './sections/StackedBars.vue'
 import Title from './sections/Title.vue'
@@ -33,7 +33,7 @@ onUnmounted(() => {
   <main class="story-page">
     <Title />
     <Intro />
-    <Breakdown :minimal-mode="minimalMode" />
+    <FishGrid :minimal-mode="minimalMode" />
     <ToyosuPrices v-if="!minimalMode" />
     <StackedBars :minimal-mode="minimalMode" />
     <Map :minimal-mode="minimalMode" />

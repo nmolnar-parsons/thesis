@@ -28,6 +28,22 @@ function lerp(a, b, t) {
   return a + (b - a) * t
 }
 
+function easeInOutCubic(t) {
+  if (t <= 0) return 0
+  if (t >= 1) return 1
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+}
+
+function easedTransitionProgress(t) {
+  // Add a small dead-band at both ends so transitions breathe
+  // before accelerating and before settling.
+  const start = 0.08
+  const end = 0.92
+  if (t <= start) return 0
+  if (t >= end) return 1
+  return easeInOutCubic((t - start) / (end - start))
+}
+
 function parse2023Counts(csvText) {
   const lines = csvText.trim().split(/\r?\n/)
   let yearFishCount = 0
@@ -256,7 +272,7 @@ function draw() {
   }
 
   if (baseStep === 1) {
-    const t = progress
+    const t = easedTransitionProgress(progress)
     const startMatchScale = Math.max(1, singleRect.h / Math.max(1, weekTopLeft.h))
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
     const singleScale = sharedShrink
@@ -273,7 +289,7 @@ function draw() {
   }
 
   if (baseStep === 3) {
-    const t = progress
+    const t = easedTransitionProgress(progress)
     const startMatchScale = Math.max(1, weekTopLeft.h / Math.max(1, yearTopLeft.h))
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
     const weekScale = sharedShrink
