@@ -605,9 +605,9 @@ onUnmounted(() => {
 
 <template>
   <div ref="wrapRef" class="stacked-wrap">
-    <h2 class="chart-main-title">
+    <h1 class="visual-title chart-main-title">
       Bluefin Tuna Catch 1965 to {{ chartEndYear }}
-    </h2>
+    </h1>
     <div class="stacked-chart-body">
       <div ref="hostRef" class="d3-host" />
       <aside class="legend" aria-label="Species in chart">
@@ -632,18 +632,13 @@ onUnmounted(() => {
   height: var(--viz-height);
   max-height: 700px;
   overflow: hidden;
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .chart-main-title {
   flex-shrink: 0;
-  margin: 0;
-  padding: 0.5rem clamp(0.75rem, 4vw, 2.5rem) 0.3rem;
-  font-size: clamp(1.4rem, 3vw, 2.1rem);
-  font-weight: 700;
-  line-height: 1.2;
-  text-align: left;
-  color: #0f172a;
-  letter-spacing: 0.01em;
+  margin-bottom: 0.45rem;
 }
 
 .stacked-chart-body {
@@ -681,8 +676,9 @@ onUnmounted(() => {
 
 .stacked-wrap :deep(.hover-line-label) {
   fill: #0f172a;
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
   pointer-events: none;
 }
 
@@ -692,31 +688,24 @@ onUnmounted(() => {
 
 .legend {
   position: absolute;
-  top: 0.2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 1rem);
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  right: 0.65rem;
+  bottom: 0.65rem;
+  z-index: 6;
+  width: auto;
+  max-width: min(280px, 46vw);
+  overflow: auto;
+  padding: 0.42rem 0.52rem;
+  border: 1px solid rgba(15, 23, 42, 0.3);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .legend-list {
   list-style: none;
   margin: 0;
-  padding: 0.1rem 0.15rem;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  justify-content: center;
-  align-items: center;
-  gap: 0.2rem 0.75rem;
-  width: max-content;
-  min-width: 100%;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
 }
 
 .legend-item {
@@ -724,7 +713,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: 0.74rem;
+  font-size: var(--font-size-visual-graph-sans);
   font-family: inherit;
   color: #0f172a;
   line-height: 1.25;
@@ -732,8 +721,16 @@ onUnmounted(() => {
 
 .stacked-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: 0.78rem;
-  font-family: inherit;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
+}
+
+.stacked-wrap :deep(.y-axis-label),
+.stacked-wrap :deep(.annotation-label) {
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .stacked-wrap :deep(.axis path),
@@ -774,7 +771,18 @@ onUnmounted(() => {
   }
 
   .legend {
-    top: 0.2rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    max-width: min(220px, 56vw);
+  }
+}
+
+@media (max-width: 640px) {
+  .legend {
+    position: static;
+    margin-top: 0.55rem;
+    margin-left: auto;
+    max-width: 100%;
   }
 }
 </style>

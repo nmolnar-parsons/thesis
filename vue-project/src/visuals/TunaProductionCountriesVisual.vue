@@ -327,6 +327,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="wrapRef" class="streamgraph-wrap">
+    <h1 class="visual-title streamgraph-title">Bluefin Tuna: Wild Capture vs Farmed</h1>
     <aside class="legend" role="note" aria-label="Production type color key">
       <ul class="legend-list">
         <li class="legend-item">
@@ -354,35 +355,35 @@ onUnmounted(() => {
   height: var(--viz-height);
   max-height: 640px;
   overflow: hidden;
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
+}
+
+.streamgraph-title {
+  flex-shrink: 0;
+  margin-bottom: 0.55rem;
 }
 
 .legend {
-  position: relative;
-  flex-shrink: 0;
-  width: 100%;
-  max-width: 1180px;
-  margin: 0 auto 0.6rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  position: absolute;
+  right: 0.65rem;
+  bottom: 0.65rem;
+  z-index: 7;
+  width: auto;
+  max-width: min(260px, 46vw);
+  overflow: auto;
+  padding: 0.42rem 0.52rem;
+  border: 1px solid rgba(15, 23, 42, 0.3);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .legend-list {
   list-style: none;
   margin: 0;
-  padding: 0.1rem 0.15rem;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  justify-content: center;
-  align-items: center;
-  gap: 0.2rem 0.75rem;
-  width: 100%;
-  min-width: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
 }
 
 .legend-item {
@@ -390,7 +391,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: 0.74rem;
+  font-size: var(--font-size-visual-graph-sans);
   font-family: inherit;
   color: #0f172a;
   cursor: default;
@@ -432,8 +433,9 @@ onUnmounted(() => {
 
 .streamgraph-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: 0.78rem;
-  font-family: inherit;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .streamgraph-wrap :deep(.axis path),
@@ -468,14 +470,16 @@ onUnmounted(() => {
 
 .streamgraph-wrap :deep(.panel-subtitle) {
   fill: #0f172a;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .streamgraph-wrap :deep(.hover-line-label) {
   fill: #0f172a;
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
   pointer-events: none;
 }
 
@@ -491,6 +495,8 @@ onUnmounted(() => {
   font-size: 0.74rem;
   line-height: 1.35;
   box-shadow: 0 4px 16px rgba(2, 6, 23, 0.35);
+  font-family: var(--font-ui-sans);
+  font-weight: 400;
 }
 
 .tooltip :deep(.country) {
@@ -509,6 +515,21 @@ onUnmounted(() => {
   .streamgraph-wrap {
     --viz-height: clamp(270px, 60vh, 480px);
     max-height: 480px;
+  }
+
+  .legend {
+    right: 0.5rem;
+    bottom: 0.5rem;
+    max-width: min(220px, 56vw);
+  }
+}
+
+@media (max-width: 640px) {
+  .legend {
+    position: static;
+    margin-top: 0.55rem;
+    margin-left: auto;
+    max-width: 100%;
   }
 }
 </style>

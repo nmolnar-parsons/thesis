@@ -118,22 +118,9 @@ function getGridLayout(count, boxWidth, boxHeight, left, top, baseFishWidth, bas
 
 function drawImageFish(rect, alpha = 1) {
   if (!ctx || !fishImage) return
-  const cx = rect.x + rect.w / 2
-  const cy = rect.y + rect.h / 2
-  const drawLength = rect.h
-  const drawThickness = rect.w
-
   ctx.save()
   ctx.globalAlpha = alpha
-  ctx.translate(cx, cy)
-  ctx.rotate(-Math.PI / 2)
-  ctx.drawImage(
-    fishImage,
-    -drawLength / 2,
-    -drawThickness / 2,
-    drawLength,
-    drawThickness,
-  )
+  ctx.drawImage(fishImage, rect.x, rect.y, rect.w, rect.h)
   ctx.restore()
 }
 
@@ -200,6 +187,23 @@ function drawImageGridScaled(layout, anchorRect, scale, alpha = 1) {
   }
 }
 
+function drawImageGridFromLead(layout, leadRect, scale, alpha = 1) {
+  const first = layout.positions[0]
+  if (!first) return
+  for (let i = 0; i < layout.positions.length; i++) {
+    const rect = layout.positions[i]
+    drawImageFish(
+      {
+        x: leadRect.x + (rect.x - first.x) * scale,
+        y: leadRect.y + (rect.y - first.y) * scale,
+        w: rect.w * scale,
+        h: rect.h * scale,
+      },
+      alpha,
+    )
+  }
+}
+
 function draw() {
   const canvas = canvasRef.value
   if (!canvas || !ctx) return
@@ -219,42 +223,49 @@ function draw() {
   ctx.fillRect(0, 0, width, height)
 
   const aspectRatio = fishAspect.value
-  const edgePad = 24
-  const anchorX = width / 3
-  const availableWidth = Math.max(60, width - anchorX - edgePad)
-  const targetSingleHeight = height * 0.8
-  const singleHeight = Math.min(targetSingleHeight, (availableWidth * aspectRatio) / 0.92)
-  const singleWidth = singleHeight / aspectRatio
-  const singleRect = {
-    x: anchorX,
-    y: (height - singleHeight) / 2,
-    w: singleWidth,
-    h: singleHeight,
+  const edgePad = Math.max(36, width * 0.08)
+  const bottomPad = Math.max(36, height * 0.08)
+  const titlePad = Math.max(76, height * 0.16)
+  const contentTop = titlePad
+  const contentHeight = Math.max(60, height - contentTop - bottomPad)
+  const contentWidth = Math.max(60, width - 2 * edgePad)
+
+  const singleW = Math.min(contentWidth * 0.62, contentHeight * 0.8 * aspectRatio)
+  const singleH = singleW / aspectRatio
+
+  const singleCenterRect = {
+    x: (width - singleW) / 2,
+    y: contentTop + (contentHeight - singleH) / 2,
+    w: singleW,
+    h: singleH,
   }
-  const baseGap = Math.max(2, singleRect.h * 0.04)
+
+  const gridLeft = edgePad
+  const gridTop = contentTop
+  const baseGap = Math.max(2, singleH * 0.04)
 
   const weekLayout = getGridLayout(
     fishTotals.value.weekFishCount,
-    availableWidth,
-    singleHeight,
-    singleRect.x,
-    singleRect.y,
-    singleRect.w,
-    singleRect.h,
+    contentWidth,
+    contentHeight,
+    gridLeft,
+    gridTop,
+    singleW,
+    singleH,
     baseGap,
   )
   const yearLayout = getGridLayout(
     fishTotals.value.yearFishCount,
-    availableWidth,
-    singleHeight,
-    weekLayout.left,
-    weekLayout.top,
-    singleRect.w,
-    singleRect.h,
+    contentWidth,
+    contentHeight,
+    gridLeft,
+    gridTop,
+    singleW,
+    singleH,
     baseGap,
   )
 
-  const weekTopLeft = weekLayout.positions[0] || singleRect
+  const weekTopLeft = weekLayout.positions[0] || { x: gridLeft, y: gridTop, w: singleW, h: singleH }
   const yearTopLeft = yearLayout.positions[0] || weekTopLeft
 
   const baseStep = Math.max(0, Math.min(4, props.activeStep))
@@ -267,19 +278,25 @@ function draw() {
       : rawProgress
 
   if (baseStep === 0) {
-    drawImageFish(singleRect, 1)
+    drawImageFish(singleCenterRect, 1)
     return
   }
 
   if (baseStep === 1) {
     const t = easedTransitionProgress(progress)
-    const startMatchScale = Math.max(1, singleRect.h / Math.max(1, weekTopLeft.h))
+    const startMatchScale = singleCenterRect.h / Math.max(1, weekTopLeft.h)
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
-    const singleScale = sharedShrink
     const weekScale = startMatchScale * sharedShrink
 
-    drawImageGridScaled(weekLayout, weekTopLeft, weekScale, t)
-    drawImageFish(scaleRectFromAnchor(singleRect, weekTopLeft, singleScale), 1 - t * 0.18)
+    const leadRect = {
+      x: lerp(singleCenterRect.x, weekTopLeft.x, t),
+      y: lerp(singleCenterRect.y, weekTopLeft.y, t),
+      w: weekTopLeft.w * weekScale,
+      h: weekTopLeft.h * weekScale,
+    }
+
+    drawImageGridFromLead(weekLayout, leadRect, weekScale, t)
+    drawImageFish(leadRect, 1 - t * 0.18)
     return
   }
 
@@ -383,12 +400,14 @@ watch(
 
 <template>
   <div class="breakdown-fish-visual">
+    <h2 class="visual-title visual-title--on-dark">The King of Sushi</h2>
     <canvas ref="canvasRef" aria-hidden="true" />
   </div>
 </template>
 
 <style scoped>
 .breakdown-fish-visual {
+  position: relative;
   width: 100%;
   height: 100%;
 }
@@ -397,5 +416,15 @@ canvas {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.breakdown-fish-visual .visual-title {
+  position: absolute;
+  top: clamp(0.75rem, 2.5vh, 2rem);
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1;
+  white-space: nowrap;
 }
 </style>

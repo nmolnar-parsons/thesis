@@ -161,6 +161,8 @@ const countNumberColor = computed(() => {
   return colorByIntensity(t)
 })
 
+const mapLegendGradient = `linear-gradient(to right, ${CATCH_COLOR_RAMP.join(', ')})`
+
 const narrativeCopy = computed(() => {
   if (props.activeStep >= STEP_FULLVIEW_LINGER_START && props.activeStep <= STEP_FULLVIEW_LINGER_END) {
     return LINGER_2023_FILLER
@@ -244,11 +246,7 @@ function applyTunaCatchFillSeamMitigation() {
 }
 
 function cameraForStep(stepIndex) {
-  const cameraPadding = props.minimalMode
-    ? { top: 24, right: 24, bottom: 24, left: 24 }
-    : window.innerWidth < 900
-      ? { top: 24, right: 24, bottom: 24, left: 64 }
-      : { top: 24, right: 40, bottom: 24, left: 220 }
+  const cameraPadding = { top: 24, right: 24, bottom: 24, left: 24 }
   if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_END) {
     return { key: 'mediterranean', center: [14, 38], zoom: 4.35, duration: 2600, padding: cameraPadding }
   }
@@ -364,11 +362,11 @@ onUnmounted(() => {
 
 <template>
   <div class="map-frame">
+    <h1 class="visual-title visual-title--on-dark map-title">Where Has All the Tuna Gone?</h1>
     <div ref="mapRef" class="map-host" />
 
     <div class="hud-row">
       <div class="metrics-card">
-        <h2 class="map-hud-title">Where Has All the Tuna Gone?</h2>
         <p class="year-text">{{ currentYear }}</p>
         <p v-if="!minimalMode" class="metric-line">
           <span class="metric-caption">Total fish caught:</span>
@@ -396,6 +394,14 @@ onUnmounted(() => {
     <p v-if="tokenMissing" class="token-warning">
       Add `VITE_MAPBOX_TOKEN` in your local `.env` to render the map.
     </p>
+
+    <aside class="map-legend" aria-label="Catch intensity legend">
+      <div class="map-legend-bar" :style="{ background: mapLegendGradient }" />
+      <div class="map-legend-labels">
+        <span>low catch</span>
+        <span>high catch</span>
+      </div>
+    </aside>
   </div>
 </template>
 
@@ -404,6 +410,18 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
+}
+
+.map-title {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  z-index: 9;
+  transform: translateX(-50%);
+  width: calc(100% - 2rem);
+  pointer-events: none;
 }
 
 .map-host {
@@ -415,7 +433,7 @@ onUnmounted(() => {
 .hud-row {
   position: absolute;
   left: 0.85rem;
-  top: 0.85rem;
+  top: clamp(2.8rem, 6vh, 3.6rem);
   z-index: 7;
   max-width: calc(100% - 1.7rem);
 }
@@ -449,29 +467,56 @@ onUnmounted(() => {
   letter-spacing: 0.01em;
 }
 
+.map-legend {
+  position: absolute;
+  right: 0.85rem;
+  bottom: 0.85rem;
+  z-index: 7;
+  width: min(300px, 72vw);
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(15, 23, 42, 0.3);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.map-legend-bar {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+}
+
+.map-legend-labels {
+  margin-top: 0.38rem;
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-visual-graph-sans);
+  color: #0f172a;
+}
+
 .year-text {
   margin: 0 0 0.35rem;
   color: #000000;
   font-size: clamp(1.6rem, 2.9vw, 2.4rem);
   line-height: 1;
-  font-weight: 800;
+  font-weight: var(--font-weight-visual-graph-sans);
   letter-spacing: 0.02em;
 }
 
 .metric-line {
   margin: 0.2rem 0;
   color: #000000;
-  font-size: 0.85rem;
+  font-size: var(--font-size-visual-graph-sans);
   line-height: 1.35;
 }
 
 .metric-caption {
-  font-weight: 700;
+  font-weight: var(--font-weight-visual-graph-sans);
   margin-right: 0.35rem;
 }
 
 .metric-value {
-  font-weight: 600;
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .metric-line-temp {
@@ -520,8 +565,8 @@ onUnmounted(() => {
   top: -10%;
   margin: 0;
   color: rgba(185, 28, 28, 0.96);
-  font-size: clamp(0.8rem, 1.1vw, 1.05rem);
-  font-weight: 700;
+  font-size: var(--font-size-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
   transform: rotate(20deg);
   text-transform: lowercase;
 }
@@ -543,7 +588,19 @@ onUnmounted(() => {
   .mediterranean-callout-label {
     top: clamp(0.5rem, 2vmin, 1.1rem);
     right: clamp(0.45rem, 2vmin, 1.2rem);
-    font-size: clamp(0.75rem, 2.85vw, 0.92rem);
+    font-size: var(--font-size-visual-graph-sans);
+  }
+
+  .map-title {
+    top: 0.4rem;
+    width: calc(100% - 1rem);
+  }
+
+  .map-legend {
+    right: 0.55rem;
+    bottom: 0.55rem;
+    width: min(240px, 76vw);
+    padding: 0.38rem 0.48rem;
   }
 }
 
@@ -560,6 +617,8 @@ onUnmounted(() => {
   background: rgba(254, 242, 242, 0.92);
   color: #991b1b;
   font-size: 0.8rem;
+  font-family: var(--font-ui-sans);
+  font-weight: 400;
 }
 
 </style>

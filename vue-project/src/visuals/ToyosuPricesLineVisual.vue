@@ -407,6 +407,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="wrapRef" class="linechart-wrap">
+    <h1 class="visual-title linechart-title">Toyosu Tuna Prices</h1>
     <aside class="legend" aria-label="Price series in chart">
       <ul class="legend-list">
         <li
@@ -442,6 +443,12 @@ onUnmounted(() => {
   height: var(--viz-height);
   max-height: 560px;
   overflow: hidden;
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
+}
+
+.linechart-title {
+  margin-bottom: 0.45rem;
 }
 
 .d3-host {
@@ -457,8 +464,9 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: 0.78rem;
-  font-family: inherit;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .linechart-wrap :deep(.axis path),
@@ -468,8 +476,9 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.axis-label) {
   fill: #334155;
-  font-size: 0.86rem;
-  font-family: inherit;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .linechart-wrap :deep(.series-line) {
@@ -499,38 +508,32 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.hover-line-label) {
   fill: #0f172a;
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
   pointer-events: none;
 }
 
 .legend {
   position: absolute;
-  top: 0.25rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 1rem);
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  right: 0.65rem;
+  bottom: 0.65rem;
+  z-index: 6;
+  width: auto;
+  max-width: min(280px, 46vw);
+  overflow: auto;
+  padding: 0.42rem 0.52rem;
+  border: 1px solid rgba(15, 23, 42, 0.3);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .legend-list {
   list-style: none;
   margin: 0;
-  padding: 0.1rem 0.15rem;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  justify-content: center;
-  align-items: center;
-  gap: 0.2rem 0.75rem;
-  width: max-content;
-  min-width: 100%;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
 }
 
 .legend-item {
@@ -538,7 +541,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: 0.74rem;
+  font-size: var(--font-size-visual-graph-sans);
   font-family: inherit;
   color: #0f172a;
   cursor: pointer;
@@ -547,7 +550,7 @@ onUnmounted(() => {
 
 .legend-item.is-active {
   opacity: 1;
-  font-weight: 700;
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
 .legend-item.is-inactive {
@@ -577,6 +580,8 @@ onUnmounted(() => {
   font-size: 0.7rem;
   line-height: 1.25;
   box-shadow: 0 4px 16px rgba(2, 6, 23, 0.35);
+  font-family: var(--font-ui-sans);
+  font-weight: 400;
 }
 
 @media (max-width: 900px) {
@@ -586,7 +591,18 @@ onUnmounted(() => {
   }
 
   .legend {
-    top: 0.2rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    max-width: min(220px, 56vw);
+  }
+}
+
+@media (max-width: 640px) {
+  .legend {
+    position: static;
+    margin-top: 0.55rem;
+    margin-left: auto;
+    max-width: 100%;
   }
 }
 </style>

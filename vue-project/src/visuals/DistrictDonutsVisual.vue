@@ -3,10 +3,16 @@ import { arc, pie } from 'd3-shape'
 import { csvParse } from 'd3-dsv'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import csvRaw from '../data/tuna_imports_usa_customs.csv?raw'
-import { getContinent, getCountryColor } from './countryContinentColors.js'
+import {
+  CONTINENT_ORDER,
+  getContinent,
+  getCountryColor,
+  resolveCanonicalCountry,
+} from './countryContinentColors.js'
 
 const YEAR_TARGET = 2025
 const BLUEFIN_PRODUCT = 'Tuna Bluefin Fresh'
+const MIN_DISTRICT_TONNES = 10
 const GRID_OUTER_RADIUS = 44
 const GRID_INNER_RADIUS = 24
 const GRID_SVG_SIZE = 108
@@ -19,16 +25,75 @@ const SINGLE_CENTER = SINGLE_SVG_SIZE / 2
 
 /** Radial bump from arc, then one straight segment to label (single bend). Donut-centered coords. */
 const CALLOUT_RADIAL_BUMP = 30
-/** Chord length along mostly-horizontal run from bump toward label */
-const CALLOUT_HORIZONTAL = 58
-/** Min vertical gap between stacked labels (same side), SVG user units */
-const CALLOUT_MIN_LABEL_GAP = 20
-/** Keep left callouts from reaching too far toward the menu (max x is toward +∞; clamp floor) */
-const CALLOUT_MIN_LEFT_X = -208
-/** Optional cap on right-side extent (donut-centered x) */
-const CALLOUT_MAX_RIGHT_X = 248
+/** How far out labels sit from donut edge along slice direction */
+const CALLOUT_LABEL_RADIUS = SINGLE_OUTER_RADIUS + 86
 const CALLOUT_DOT_R = 5.5
-const CALLOUT_TEXT_GAP = 12
+const CALLOUT_TEXT_GAP = 18
+const CALLOUT_LABEL_MIN_DIST = 34
+const CALLOUT_COLLISION_PULL_STEP = 12
+const CALLOUT_LABEL_MIN_RADIUS = SINGLE_OUTER_RADIUS + 28
+const UNKNOWN_FLAG = '◻'
+
+const COUNTRY_TO_ISO2 = {
+  Argentina: 'AR',
+  Australia: 'AU',
+  Barbados: 'BB',
+  Belize: 'BZ',
+  Brazil: 'BR',
+  Canada: 'CA',
+  Chile: 'CL',
+  China: 'CN',
+  Colombia: 'CO',
+  'Costa Rica': 'CR',
+  Croatia: 'HR',
+  Cuba: 'CU',
+  'Dominican Republic': 'DO',
+  Ecuador: 'EC',
+  Egypt: 'EG',
+  Fiji: 'FJ',
+  France: 'FR',
+  Ghana: 'GH',
+  Greece: 'GR',
+  India: 'IN',
+  Indonesia: 'ID',
+  Israel: 'IL',
+  Italy: 'IT',
+  Jamaica: 'JM',
+  Japan: 'JP',
+  Kiribati: 'KI',
+  Libya: 'LY',
+  Malta: 'MT',
+  Mexico: 'MX',
+  Morocco: 'MA',
+  Namibia: 'NA',
+  'New Zealand': 'NZ',
+  Nicaragua: 'NI',
+  Nigeria: 'NG',
+  Norway: 'NO',
+  Panama: 'PA',
+  Peru: 'PE',
+  Philippines: 'PH',
+  Portugal: 'PT',
+  'Russian Federation': 'RU',
+  Senegal: 'SN',
+  Seychelles: 'SC',
+  'South Africa': 'ZA',
+  'South Korea': 'KR',
+  Spain: 'ES',
+  'Sri Lanka': 'LK',
+  Suriname: 'SR',
+  Taiwan: 'TW',
+  Thailand: 'TH',
+  Tunisia: 'TN',
+  Turkey: 'TR',
+  Ukraine: 'UA',
+  'United Kingdom': 'GB',
+  'United States': 'US',
+  Uruguay: 'UY',
+  Vanuatu: 'VU',
+  'Venezuela, Bolivarian Republic of': 'VE',
+  Vietnam: 'VN',
+}
 
 /** Leader lines / labels draw in the last portion of the morph (after arcs have mostly settled). */
 const CALLOUT_REVEAL_MORPH_START = 0.62
@@ -65,8 +130,17 @@ const filteredImportRows = computed(() =>
   parsedRows.filter((d) => d.year === YEAR_TARGET && d.productName === BLUEFIN_PRODUCT),
 )
 
+const continentRank = new Map(CONTINENT_ORDER.map((continent, index) => [continent, index]))
+
 const pieGenerator = pie()
-  .sort((a, b) => b.tonnes - a.tonnes)
+  .sort((a, b) => {
+    const aContinent = getContinent(a.country)
+    const bContinent = getContinent(b.country)
+    const aRank = continentRank.get(aContinent) ?? Number.MAX_SAFE_INTEGER
+    const bRank = continentRank.get(bContinent) ?? Number.MAX_SAFE_INTEGER
+    if (aRank !== bRank) return aRank - bRank
+    return a.country.localeCompare(b.country)
+  })
   .value((d) => d.tonnes)
 
 const arcGeneratorGrid = arc().innerRadius(GRID_INNER_RADIUS).outerRadius(GRID_OUTER_RADIUS)
@@ -103,7 +177,7 @@ const districtCharts = computed(() => {
   }
 
   return Array.from(districtMap.values())
-    .filter((e) => e.totalTonnes > 0)
+    .filter((e) => e.totalTonnes >= MIN_DISTRICT_TONNES)
     .map(chartFromDistrictEntry)
     .sort((a, b) => b.totalTonnes - a.totalTonnes)
 })
@@ -273,54 +347,8 @@ const displaySingleArcs = computed(() => {
 
 const calloutStrokeReveal = computed(() => (isMorphing.value ? morphCalloutReveal.value : 1))
 
-function sortLegendEntries(a, b) {
-  if (a.country.toLowerCase() === 'japan') return -1
-  if (b.country.toLowerCase() === 'japan') return 1
-  if (a.continent !== b.continent) return a.continent.localeCompare(b.continent)
-  return b.tonnes - a.tonnes
-}
-
-const legendCountries = computed(() => {
-  const rows = filteredImportRows.value.filter((d) => d.district === selectedKey.value)
-
-  const totals = new Map()
-  for (const row of rows) {
-    totals.set(row.country, (totals.get(row.country) || 0) + row.tonnes)
-  }
-  return Array.from(totals.entries())
-    .map(([country, tonnes]) => ({ country, tonnes, continent: getContinent(country) }))
-    .sort(sortLegendEntries)
-})
-
-/**
- * One bend only: outer arc → radial bump → straight to dot at label height.
- * horizontalSpan: approximate run from bump toward the label (donut-centered x).
- */
-function applyOneTurnLayout(r, labelY, horizontalSpan) {
-  const sx = r.onRight ? 1 : -1
-  let ex = r.bx + sx * horizontalSpan
-  const ey = labelY
-  if (!r.onRight) ex = Math.max(ex, CALLOUT_MIN_LEFT_X)
-  else ex = Math.min(ex, CALLOUT_MAX_RIGHT_X)
-  const dotX = ex
-  const dotY = ey
-  const textAnchor = r.onRight ? 'start' : 'end'
-  const textX = r.onRight ? dotX + CALLOUT_DOT_R + CALLOUT_TEXT_GAP : dotX - CALLOUT_DOT_R - CALLOUT_TEXT_GAP
-  return {
-    ...r,
-    tx: ex,
-    elbowY: r.by,
-    dotX,
-    dotY,
-    textX,
-    textY: ey,
-    textAnchor,
-    polylinePoints: `${r.ax},${r.ay} ${r.bx},${r.by} ${ex},${ey}`,
-  }
-}
-
-/** Leader-line callouts in donut-centered coords (radial dir from arc centroid = d3 arc convention) */
-function calloutForArc(arcDatum, arcGen, outerR, radialBump, horizontalLen) {
+/** Radial callouts: arc edge -> radial bump -> straight radial segment to label. */
+function calloutForArc(arcDatum, arcGen, outerR, radialBump) {
   const [gcx, gcy] = arcGen.centroid(arcDatum)
   const glen = Math.hypot(gcx, gcy) || 1
   const ux = gcx / glen
@@ -329,44 +357,79 @@ function calloutForArc(arcDatum, arcGen, outerR, radialBump, horizontalLen) {
   const ay = uy * outerR
   const bx = ux * (outerR + radialBump)
   const by = uy * (outerR + radialBump)
-  const onRight = ux >= 0
-  const base = {
+  const dotX = ux * CALLOUT_LABEL_RADIUS
+  const dotY = uy * CALLOUT_LABEL_RADIUS
+  const textX = dotX + ux * (CALLOUT_DOT_R + CALLOUT_TEXT_GAP)
+  const textY = dotY + uy * (CALLOUT_DOT_R + CALLOUT_TEXT_GAP)
+
+  return {
     country: arcDatum.data.country,
     color: getCountryColor(arcDatum.data.country),
     ux,
     uy,
+    dotR: CALLOUT_DOT_R,
     ax,
     ay,
     bx,
     by,
-    onRight,
-    dotR: CALLOUT_DOT_R,
-    labelY0: by,
+    labelRadius: CALLOUT_LABEL_RADIUS,
+    dotX,
+    dotY,
+    textX,
+    textY,
+    polylinePoints: `${ax},${ay} ${bx},${by} ${dotX},${dotY}`,
     segment: arcDatum.data,
   }
-  return applyOneTurnLayout(base, by, horizontalLen)
 }
 
-/** Nudge label Y on each side so stacked callouts do not overlap; rebuild one-turn polylines. */
-function packCalloutLabelYs(rows, minGap) {
-  const left = rows.filter((r) => !r.onRight)
-  const right = rows.filter((r) => r.onRight)
-  const placed = new Map()
+function applyLabelRadius(row, labelRadius) {
+  const nextRadius = Math.max(CALLOUT_LABEL_MIN_RADIUS, labelRadius)
+  const dotX = row.ux * nextRadius
+  const dotY = row.uy * nextRadius
+  const textX = dotX + row.ux * (CALLOUT_DOT_R + CALLOUT_TEXT_GAP)
+  const textY = dotY + row.uy * (CALLOUT_DOT_R + CALLOUT_TEXT_GAP)
+  return {
+    ...row,
+    labelRadius: nextRadius,
+    dotX,
+    dotY,
+    textX,
+    textY,
+    polylinePoints: `${row.ax},${row.ay} ${row.bx},${row.by} ${dotX},${dotY}`,
+  }
+}
 
-  for (const group of [left, right]) {
-    const sorted = [...group].sort((a, b) => a.labelY0 - b.labelY0)
-    let prevY = -Infinity
-    for (const r of sorted) {
-      const labelY = Math.max(r.labelY0, prevY + minGap)
-      prevY = labelY
-      placed.set(r.country, labelY)
+function resolveCalloutOverlaps(rows) {
+  const out = rows.map((r) => ({ ...r }))
+  let changed = true
+  let guard = 0
+
+  while (changed && guard < 40) {
+    changed = false
+    guard += 1
+
+    for (let i = 0; i < out.length; i += 1) {
+      for (let j = i + 1; j < out.length; j += 1) {
+        const a = out[i]
+        const b = out[j]
+        const dx = a.textX - b.textX
+        const dy = a.textY - b.textY
+        const dist = Math.hypot(dx, dy)
+        if (dist >= CALLOUT_LABEL_MIN_DIST) continue
+
+        const rightIndex = a.textX >= b.textX ? i : j
+        const right = out[rightIndex]
+        const next = applyLabelRadius(right, right.labelRadius - CALLOUT_COLLISION_PULL_STEP)
+
+        if (next.labelRadius < right.labelRadius) {
+          out[rightIndex] = next
+          changed = true
+        }
+      }
     }
   }
 
-  return rows.map((r) => {
-    const labelY = placed.get(r.country) ?? r.labelY0
-    return applyOneTurnLayout(r, labelY, CALLOUT_HORIZONTAL)
-  })
+  return out
 }
 
 function measurePolylineLength(pointsStr) {
@@ -385,14 +448,14 @@ function measurePolylineLength(pointsStr) {
 function buildPackedCallouts(chart) {
   if (!chart?.arcs?.length) return []
   const raw = chart.arcs.map((arcDatum) => ({
-    ...calloutForArc(arcDatum, arcGeneratorSingle, SINGLE_OUTER_RADIUS, CALLOUT_RADIAL_BUMP, CALLOUT_HORIZONTAL),
+    ...calloutForArc(arcDatum, arcGeneratorSingle, SINGLE_OUTER_RADIUS, CALLOUT_RADIAL_BUMP),
     segment: arcDatum.data,
   }))
-  const packed = packCalloutLabelYs(raw, CALLOUT_MIN_LABEL_GAP)
-  for (const r of packed) {
+  const resolved = resolveCalloutOverlaps(raw)
+  for (const r of resolved) {
     r.lineLength = measurePolylineLength(r.polylinePoints)
   }
-  return packed
+  return resolved
 }
 
 const singleDonutCallouts = computed(() => buildPackedCallouts(selectedDistrictChart.value))
@@ -421,17 +484,24 @@ function onArcLeave() {
   tooltip.value.visible = false
 }
 
-function onLegendEnter(country) {
-  if (isMorphing.value) return
-  hoveredCountry.value = country
-}
-
-function onLegendLeave() {
-  hoveredCountry.value = ''
-}
-
 function formatTonnes(value) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+function iso2ToFlag(iso2) {
+  if (!iso2 || iso2.length !== 2) return UNKNOWN_FLAG
+  const upper = iso2.toUpperCase()
+  const A = 0x1f1e6
+  const first = upper.codePointAt(0) - 65
+  const second = upper.codePointAt(1) - 65
+  if (first < 0 || first > 25 || second < 0 || second > 25) return UNKNOWN_FLAG
+  return String.fromCodePoint(A + first, A + second)
+}
+
+function countryFlag(country) {
+  const canonical = resolveCanonicalCountry(country) || country
+  const iso2 = COUNTRY_TO_ISO2[canonical]
+  return iso2ToFlag(iso2)
 }
 
 function districtHasCountrySlice(district, country) {
@@ -442,23 +512,7 @@ function districtHasCountrySlice(district, country) {
 
 <template>
   <div class="imports-wrap">
-    <p class="imports-label">Bluefin imports by U.S. customs district (2025)</p>
-    <div class="country-legend" aria-label="Country color legend">
-      <div
-        v-for="entry in legendCountries"
-        :key="entry.country"
-        class="legend-item"
-        :class="{
-          'legend-item--dimmed': hoveredCountry && hoveredCountry !== entry.country,
-          'legend-item--active': hoveredCountry && hoveredCountry === entry.country,
-        }"
-        @mouseenter="onLegendEnter(entry.country)"
-        @mouseleave="onLegendLeave"
-      >
-        <span class="legend-swatch" :style="{ background: getCountryColor(entry.country) }" />
-        <span class="legend-country">{{ entry.country }}</span>
-      </div>
-    </div>
+    <h1 class="visual-title imports-title">Bluefin imports by U.S. customs district (2025)</h1>
 
     <div class="imports-body imports-body--with-menu">
       <aside class="district-menu" aria-label="Customs district selection">
@@ -580,11 +634,11 @@ function districtHasCountrySlice(district, country) {
                     :x="item.textX"
                     :y="item.textY"
                     class="callout-text"
-                    :text-anchor="item.textAnchor"
+                    text-anchor="middle"
                     dominant-baseline="middle"
                     :opacity="calloutStrokeReveal"
                   >
-                    {{ item.country }}
+                    {{ countryFlag(item.country) }}
                   </text>
                 </g>
               </g>
@@ -592,6 +646,7 @@ function districtHasCountrySlice(district, country) {
           </article>
         </template>
       </div>
+
     </div>
 
     <div
@@ -609,52 +664,12 @@ function districtHasCountrySlice(district, country) {
 <style scoped>
 .imports-wrap {
   position: relative;
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
 }
 
-.imports-label {
-  margin: 0 0 0.9rem;
-  text-align: center;
-  font-size: 0.78rem;
-  color: #475569;
-}
-
-.country-legend {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.45rem 0.8rem;
-  margin: 0 auto 1rem;
-  max-width: 1180px;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  color: #334155;
-  cursor: pointer;
-  transition: opacity 0.16s ease;
-}
-
-.legend-item--dimmed {
-  opacity: 0.28;
-}
-
-.legend-item--active {
-  opacity: 1;
-}
-
-.legend-swatch {
-  width: 0.62rem;
-  height: 0.62rem;
-  border-radius: 2px;
-  border: 1px solid rgba(15, 23, 42, 0.2);
-  flex-shrink: 0;
-}
-
-.legend-country {
-  white-space: nowrap;
+.imports-title {
+  margin-bottom: 0.85rem;
 }
 
 .imports-body {
@@ -666,10 +681,11 @@ function districtHasCountrySlice(district, country) {
 }
 
 .imports-body--with-menu {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
-  gap: 1rem;
+  gap: 0;
 }
 
 .district-menu {
@@ -677,10 +693,17 @@ function districtHasCountrySlice(district, country) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  align-self: stretch;
+  height: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.22);
+  border-right: none;
+  border-radius: 0.6rem 0 0 0.6rem;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .district-menu-grid {
-  flex: 1;
+  flex: none;
   min-height: 0;
   display: grid;
   gap: clamp(0.2rem, 1.2vw, 0.45rem);
@@ -772,7 +795,15 @@ function districtHasCountrySlice(district, country) {
 
 .imports-center {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   min-width: 0;
+  height: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.22);
+  border-radius: 0 0.6rem 0.6rem 0;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .imports-body--with-menu .imports-center {
@@ -804,14 +835,14 @@ function districtHasCountrySlice(district, country) {
 .district-title {
   margin: 0;
   text-align: center;
-  font-size: 0.8rem;
+  font-size: var(--font-size-visual-graph-sans);
   line-height: 1.3;
   color: #0f172a;
 }
 
 .district-total {
   margin: 0.35rem 0 0.6rem;
-  font-size: 0.74rem;
+  font-size: var(--font-size-visual-graph-sans);
   color: #475569;
 }
 
@@ -821,10 +852,10 @@ function districtHasCountrySlice(district, country) {
 
 .donut-svg--single {
   display: block;
-  width: min(100%, 640px);
+  width: min(100%, 700px);
   max-width: 100%;
   height: auto;
-  margin: -5.25rem auto 0;
+  margin: -4.8rem auto 0;
 }
 
 .arc-segment {
@@ -866,8 +897,9 @@ function districtHasCountrySlice(district, country) {
 }
 
 .callout-text {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: calc(var(--font-size-visual-graph-sans) * 3);
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
   fill: #0f172a;
   pointer-events: visibleFill;
 }
@@ -894,16 +926,12 @@ function districtHasCountrySlice(district, country) {
   color: #f8fafc;
   font-size: 0.73rem;
   line-height: 1.35;
+  font-family: var(--font-ui-sans);
+  font-weight: 400;
 }
 
 .tooltip-country {
   font-weight: 700;
-}
-
-@media (max-width: 980px) {
-  .country-legend {
-    justify-content: flex-start;
-  }
 }
 
 @media (max-width: 720px) {
@@ -913,10 +941,13 @@ function districtHasCountrySlice(district, country) {
 
   .imports-body--with-menu {
     grid-template-columns: 1fr;
+    gap: 0.6rem;
   }
 
   .district-menu {
     width: 100%;
+    border-right: 1px solid rgba(15, 23, 42, 0.22);
+    border-radius: 0.6rem;
   }
 
   .district-menu-grid {
@@ -926,6 +957,10 @@ function districtHasCountrySlice(district, country) {
     grid-template-rows: none !important;
     grid-auto-rows: minmax(3.25rem, auto);
     gap: 0.35rem;
+  }
+
+  .imports-center {
+    border-radius: 0.6rem;
   }
 }
 </style>

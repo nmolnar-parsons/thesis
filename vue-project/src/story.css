@@ -15,6 +15,13 @@
   --font-weight-body: 400;
   --font-size-copy-eyebrow: 0.8rem;
   --font-size-copy-title: 1.4rem;
+  --font-visual-title: var(--font-copy-display);
+  --font-size-visual-title: clamp(1.45rem, 2.6vw, 2.3rem);
+  --font-weight-visual-title: 600;
+  --line-height-visual-title: 1.2;
+  --font-visual-graph-sans: var(--font-ui-sans);
+  --font-weight-visual-graph-sans: 600;
+  --font-size-visual-graph-sans: 0.9rem;
 
   /* Colors */
   --color-text: #1f2937;
@@ -66,6 +73,27 @@ a {
 
 #app {
   width: 100%;
+}
+
+.visual-title {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-visual-title);
+  font-size: var(--font-size-visual-title);
+  font-weight: var(--font-weight-visual-title);
+  line-height: var(--line-height-visual-title);
+  color: #0f172a;
+}
+
+.visual-title--on-dark {
+  color: #f8fafc;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.visual-graph-type {
+  font-family: var(--font-visual-graph-sans);
+  font-weight: var(--font-weight-visual-graph-sans);
+  font-size: var(--font-size-visual-graph-sans);
 }
 
 .story-page {
