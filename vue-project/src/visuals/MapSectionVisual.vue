@@ -368,6 +368,7 @@ onUnmounted(() => {
 
     <div class="hud-row">
       <div class="metrics-card">
+        <h2 class="map-hud-title">Where Has All the Tuna Gone?</h2>
         <p class="year-text">{{ currentYear }}</p>
         <p v-if="!minimalMode" class="metric-line">
           <span class="metric-caption">Total fish caught:</span>
@@ -436,6 +437,16 @@ onUnmounted(() => {
   border-top: 1px solid rgba(15, 23, 42, 0.12);
   font-size: 0.92rem;
   line-height: 1.35;
+}
+
+.map-hud-title {
+  margin: 0 0 0.55rem;
+  padding: 0;
+  color: #0f172a;
+  font-size: clamp(1.25rem, 2.6vw, 1.7rem);
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .year-text {

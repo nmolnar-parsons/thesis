@@ -31,7 +31,6 @@ onUnmounted(() => {
 
 <template>
   <main class="story-page">
-    <Title />
     <Intro />
     <FishGrid :minimal-mode="minimalMode" />
     <ToyosuPrices v-if="!minimalMode" />

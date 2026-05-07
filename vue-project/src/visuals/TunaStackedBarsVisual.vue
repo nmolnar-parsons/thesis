@@ -22,40 +22,33 @@ const props = defineProps({
 const hostRef = ref(null)
 const wrapRef = ref(null)
 const YEAR_START = 1965
-const BLUEFIN_SPECIES = ['BFT', 'PBF', 'SBF']
+/** CSV codes combined into one chart series (Atlantic bluefin color). */
+const BLUEFIN_SOURCE_SPECIES = ['BFT', 'PBF', 'SBF']
+const BLUEFIN_CODE = 'BLUEFIN'
+const BLUEFIN_SPECIES = [BLUEFIN_CODE]
 const STAGGER_MS = 52
 
-const SPECIES_META = [
-  { code: 'PBF', label: 'Pacific bluefin' },
-  { code: 'BFT', label: 'Atlantic bluefin' },
-  { code: 'SBF', label: 'Southern bluefin' },
-  { code: 'YFT', label: 'Yellowfin' },
-  { code: 'BET', label: 'Bigeye' },
-]
+const SPECIES_META = [{ code: BLUEFIN_CODE, label: 'Bluefin Tuna' }]
 
 const SPECIES_COLORS = {
-  PBF: '#5A7390',
-  BFT: '#17203D',
-  SBF: '#B3BFD1',
-  YFT: '#E5D76A',
-  BET: '#C2BD88',
+  [BLUEFIN_CODE]: '#17203D',
 }
 
 const STAGES = [
   {
-    species: ['BFT', 'PBF', 'SBF'],
+    species: [BLUEFIN_CODE],
     yearRange: [1965, 1990],
   },
   {
-    species: ['BFT', 'PBF', 'SBF'],
+    species: [BLUEFIN_CODE],
     yearRange: [1965, 2007],
   },
   {
-    species: ['BFT', 'PBF', 'SBF'],
+    species: [BLUEFIN_CODE],
     yearRange: [1965, 2012],
   },
   {
-    species: ['BFT', 'PBF', 'SBF'],
+    species: [BLUEFIN_CODE],
   },
   // {
   //   species: ['PBF', 'BFT', 'SBF', 'YFT', 'BET'],
@@ -95,6 +88,9 @@ function easeCubicInOut(t) {
   return t <= 0 ? 0 : t >= 1 ? 1 : t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 }
 
+/** Latest year present in the dataset (shown in the chart title). */
+const chartEndYear = ref(YEAR_START)
+
 const prevActiveStep = ref(null)
 const introPrimed = ref(false)
 const pendingIntroStagger = ref(false)
@@ -128,6 +124,16 @@ function buildYearMatrix(rows) {
     maxY = Math.max(maxY, r.year)
     const k = `${r.species}\0${r.year}`
     bySy.set(k, (bySy.get(k) || 0) + r.value)
+  }
+  for (let y = YEAR_START; y <= maxY; y += 1) {
+    let sum = 0
+    for (const sp of BLUEFIN_SOURCE_SPECIES) {
+      sum += bySy.get(`${sp}\0${y}`) || 0
+    }
+    bySy.set(`${BLUEFIN_CODE}\0${y}`, sum)
+    for (const sp of BLUEFIN_SOURCE_SPECIES) {
+      bySy.delete(`${sp}\0${y}`)
+    }
   }
   const years = []
   for (let y = YEAR_START; y <= maxY; y++) years.push(y)
@@ -549,6 +555,7 @@ let ro
 onMounted(() => {
   const rows = parseCsv(csvRaw)
   matrixRef = buildYearMatrix(rows)
+  chartEndYear.value = matrixRef.maxYear
 
   const el = hostRef.value
   if (!el) return
@@ -598,29 +605,52 @@ onUnmounted(() => {
 
 <template>
   <div ref="wrapRef" class="stacked-wrap">
-    <div ref="hostRef" class="d3-host" />
-    <aside class="legend" aria-label="Species in chart">
-      <TransitionGroup name="legend" tag="ul" class="legend-list">
-        <li v-for="s in legendSpecies" :key="s.code" class="legend-item">
-          <span class="swatch" :style="{ '--swatch-color': SPECIES_COLORS[s.code] }" />
-          <span class="legend-label">{{ s.label }}</span>
-        </li>
-      </TransitionGroup>
-    </aside>
+    <h2 class="chart-main-title">
+      Bluefin Tuna Catch 1965 to {{ chartEndYear }}
+    </h2>
+    <div class="stacked-chart-body">
+      <div ref="hostRef" class="d3-host" />
+      <aside class="legend" aria-label="Species in chart">
+        <TransitionGroup name="legend" tag="ul" class="legend-list">
+          <li v-for="s in legendSpecies" :key="s.code" class="legend-item">
+            <span class="swatch" :style="{ '--swatch-color': SPECIES_COLORS[s.code] }" />
+            <span class="legend-label">{{ s.label }}</span>
+          </li>
+        </TransitionGroup>
+      </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .stacked-wrap {
   --viz-height: clamp(420px, 82vh, 700px);
+  display: flex;
+  flex-direction: column;
   position: relative;
   width: 100%;
   height: var(--viz-height);
   max-height: 700px;
-  /* background: #fff; */
-  /* border: 1px solid #cbd5e1; */
-  /* border-radius: 0.75rem; */
   overflow: hidden;
+}
+
+.chart-main-title {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.5rem clamp(0.75rem, 4vw, 2.5rem) 0.3rem;
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  color: #0f172a;
+  letter-spacing: 0.01em;
+}
+
+.stacked-chart-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .d3-host {
@@ -662,7 +692,7 @@ onUnmounted(() => {
 
 .legend {
   position: absolute;
-  top: 0.25rem;
+  top: 0.2rem;
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 1rem);

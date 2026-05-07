@@ -133,43 +133,47 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <StorySection id="intro" height="auto" width="full" background="#041b46">
-    <div ref="scrollerEl" class="intro-scroller">
-      <div class="intro-shell">
-        <div class="intro-grid">
-          <div v-for="(col, index) in columns" :key="index" class="intro-col">
-            <div class="intro-col-stack">
-              <img class="intro-col-img intro-col-img--base" :src="col.src" :alt="col.alt" />
-              <div class="intro-blur-pane" :style="blurPaneStyle(columnProgress[index])">
-                <img
-                  class="intro-col-img intro-col-img--blur-inner"
-                  :src="col.src"
-                  alt=""
-                  aria-hidden="true"
-                  :style="blurLayerFilterStyle()"
-                />
+  <div class="intro-outer">
+    <StorySection id="intro" height="auto" width="full" background="#041b46">
+      <div ref="scrollerEl" class="intro-scroller">
+        <div class="intro-shell">
+          <div class="intro-grid">
+            <div v-for="(col, index) in columns" :key="index" class="intro-col">
+              <div class="intro-col-stack">
+                <img class="intro-col-img intro-col-img--base" :src="col.src" :alt="col.alt" />
+                <div class="intro-blur-pane" :style="blurPaneStyle(columnProgress[index])">
+                  <img
+                    class="intro-col-img intro-col-img--blur-inner"
+                    :src="col.src"
+                    alt=""
+                    aria-hidden="true"
+                    :style="blurLayerFilterStyle()"
+                  />
+                </div>
               </div>
             </div>
           </div>
+          <h1
+            class="intro-title"
+            :style="{
+              opacity: titleOpacity,
+              visibility: titleOpacity > 0.02 ? 'visible' : 'hidden',
+            }"
+            :aria-hidden="titleAriaHidden"
+          >
+            The Last Sushi in the World
+          </h1>
         </div>
-        <h2
-          class="intro-title"
-          :style="{
-            opacity: titleOpacity,
-            visibility: titleOpacity > 0.02 ? 'visible' : 'hidden',
-          }"
-          :aria-hidden="titleAriaHidden"
-        >
-          this is sushi.
-        </h2>
       </div>
-    </div>
-  </StorySection>
+    </StorySection>
+  </div>
 </template>
 
 <style scoped>
-:deep(#intro) {
-  padding: 0;
+/* #intro is the StorySection root, so :deep(#intro) never matched; pad via wrapper. */
+.intro-outer :deep(#intro.story-section) {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .intro-scroller {
@@ -265,8 +269,8 @@ onUnmounted(() => {
   padding: clamp(1rem, 3vw, 2rem);
   text-align: center;
   pointer-events: none;
-  font-family: var(--font-copy-display);
-  font-size: clamp(2rem, 6vw, 4.5rem);
+  font-family: var(--font-title-bebas);
+  font-size: clamp(3rem, 11vw, 8rem);
   font-weight: 400;
   line-height: 1;
   text-transform: lowercase;
