@@ -37,7 +37,7 @@ onUnmounted(() => {
     <StackedBars :minimal-mode="minimalMode" />
     <Map :minimal-mode="minimalMode" />
     <CountryProduction :minimal-mode="minimalMode" />
-    <DomesticImports v-if="!minimalMode" />
+    <DomesticImports :minimal-mode="minimalMode"  />
     <Ending />
   </main>
 </template>
