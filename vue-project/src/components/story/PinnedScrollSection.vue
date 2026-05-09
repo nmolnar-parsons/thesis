@@ -95,12 +95,17 @@ onMounted(() => {
 
 .step-card h3 {
   margin: 0;
-  font-family: var(--font-copy-display);
-  font-weight: 400;
+  font-family: var(--font-copy-title);
+  font-size: var(--font-size-copy-title);
+  font-weight: var(--font-weight-copy-title);
+  color: var(--color-copy-title);
 }
 
 .step-card p {
-  font-family: var(--font-copy-display);
+  font-family: var(--font-copy);
+  font-weight: var(--font-weight-copy);
+  font-size: var(--font-size-copy);
+  color: var(--color-copy-body);
 }
 
 @media (max-width: 900px) {

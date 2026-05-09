@@ -1,27 +1,54 @@
-@import url('https://fonts.cdnfonts.com/css/baker-signet');
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
 
 /* --------------------------------------------------------------------------
    Design tokens — edit here for global typography, surfaces, and spacing
+   Three font families: title | visual-title + copy-title | Cabin (copy / UI / visual)
    -------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
 
-  /* Typography */
-  --font-ui-sans: Inter, Avenir, Helvetica, Arial, sans-serif;
-  --font-copy-display: 'Baker Signet', Georgia, 'Times New Roman', serif;
-  --font-title-bebas: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
+  /* Font families */
+  --font-title: 'Noto Serif JP';
+  --font-visual-title: 'Literata', 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-copy-title: var(--font-visual-title);
+
+  --font-copy-ui-visual: Cabin, Avenir, Helvetica, Arial, sans-serif;
+  --font-copy: var(--font-copy-ui-visual);
+  --font-ui: var(--font-copy-ui-visual);
+  --font-visual: var(--font-copy-ui-visual);
+
+  /* Copy — narrative body (not chart axes) */
   --line-height-body: 1.45;
   --font-weight-body: 400;
+  --font-weight-copy: 400;
+  --font-size-copy: 1rem;
+  --font-weight-copy-eyebrow: 600;
   --font-size-copy-eyebrow: 0.8rem;
+  --font-weight-copy-title: 400;
   --font-size-copy-title: 1.4rem;
-  --font-visual-title: var(--font-copy-display);
-  --font-size-visual-title: clamp(1.45rem, 2.6vw, 2.3rem);
-  --font-weight-visual-title: 600;
+
+  /* Visual title (chart headings) */
+  --font-size-visual-title: 3.2rem;
+  --font-weight-visual-title: 400;
   --line-height-visual-title: 1.2;
-  --font-visual-graph-sans: var(--font-ui-sans);
-  --font-weight-visual-graph-sans: 600;
-  --font-size-visual-graph-sans: 0.9rem;
+  --space-visual-title-gap: 0.2rem;
+
+  /* UI + visual graph chrome (legend, HUD, hovers, donut labels, etc.) */
+  --font-weight-ui: 600;
+  --font-size-ui: 1rem;
+
+  /*
+   * Chart axes: tick labels vs axis titles are independent of each other and of UI/copy body.
+   * Family stacks stay Cabin unless you intentionally diverge (e.g. numeric tabular font for ticks).
+   */
+  --font-family-axis-tick: var(--font-copy-ui-visual);
+  --font-weight-axis-tick: 200;
+  --font-size-axis-tick: 0.8rem;
+
+  /* Axis titles — unit / dimension labels on the graphic (not tick numbers) */
+  --font-family-axis-title: var(--font-copy-ui-visual);
+  --font-weight-axis-title: 500;
+  --font-size-axis-title: 1.2rem;
 
   /* Colors */
   --color-text: #1f2937;
@@ -36,7 +63,7 @@
   --color-copy-body: #1f2937;
 
   /* Section shell (StorySection) */
-  --story-section-padding-y: 4rem;
+  --story-section-padding-y: 2rem;
   --story-section-padding-x: 1rem;
 
   /* Pinned scroll steps */
@@ -45,12 +72,42 @@
   --step-card-padding-x: 1.2rem;
   --step-card-radius: 0.75rem;
   --step-card-max-width: min(560px, calc(100% - 2rem));
+
+  /* D3 chart inner margins (must match drawChart margin.{left,right,bottom} in visuals) */
+  --viz-chart-margin-right: 34px;
+  --viz-chart-margin-bottom: 48px;
+  /** Band below stream plot for x-axis (TunaProductionStreamgraphVisual); 0 for bar charts */
+  --viz-x-axis-band: 34px;
+  /** Lift legend bottom edge above the x-axis baseline */
+  --viz-legend-above-axis-gap: 0.35rem;
+
+  /* Shared legend / map-scale chrome */
+  --viz-legend-border: 1px solid rgba(15, 23, 42, 0.3);
+  --viz-legend-bg: rgba(255, 255, 255, 0.9);
+  --viz-legend-padding: 0.42rem 0.52rem;
+  --viz-legend-list-gap: 0.1rem;
+  --viz-legend-line-height: 1.15;
+
+  /*
+   * TunaStackedBarsVisual + TunaProductionStreamgraphVisual: outer frame height (titles sit above).
+   * Single source so both charts match footprint in the layout.
+   */
+  --viz-chart-wrap-height: clamp(480px, 88vh, 840px);
+  --viz-chart-wrap-max-height: 840px;
 }
 
-:root {
-  font-family: var(--font-ui-sans);
+@media (max-width: 900px) {
+  :root {
+    --viz-chart-wrap-height: clamp(360px, 72vh, 640px);
+    --viz-chart-wrap-max-height: 640px;
+  }
+}
+
+html {
+  font-family: var(--font-copy);
   line-height: var(--line-height-body);
   font-weight: var(--font-weight-body);
+  font-size: var(--font-size-copy);
   color: var(--color-text);
   background: var(--color-page-bg);
 }
@@ -75,8 +132,38 @@ a {
   width: 100%;
 }
 
+/* Typography utilities — family only (weight/size use tokens per context) */
+.font-title {
+  font-family: var(--font-title);
+}
+
+.font-visual-title {
+  font-family: var(--font-visual-title);
+}
+
+.font-copy-title {
+  font-family: var(--font-copy-title);
+}
+
+.font-copy {
+  font-family: var(--font-copy);
+}
+
+.font-ui,
+.font-visual {
+  font-family: var(--font-ui);
+}
+
+.font-axis-tick {
+  font-family: var(--font-family-axis-tick);
+}
+
+.font-axis-title {
+  font-family: var(--font-family-axis-title);
+}
+
 .visual-title {
-  margin: 0;
+  margin: 0 0 var(--space-visual-title-gap) 0;
   text-align: center;
   font-family: var(--font-visual-title);
   font-size: var(--font-size-visual-title);
@@ -91,9 +178,9 @@ a {
 }
 
 .visual-graph-type {
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
-  font-size: var(--font-size-visual-graph-sans);
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
+  font-size: var(--font-size-ui);
 }
 
 .story-page {

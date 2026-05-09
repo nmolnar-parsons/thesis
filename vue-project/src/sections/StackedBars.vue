@@ -23,6 +23,11 @@ const steps = [
     text: "As sushi's popularity grew, so did the demand for bluefin tuna. In the 1980s, it became possible and profitable to ship Atlantic bluefin tuna to Japan. By 2007, over 60,000 tonnes of Atlantic bluefin tuna were caught yearly.",
   },
   {
+    id: 'hf1a',
+    title: '',
+    text: '1965 to 1990',
+  },
+  {
     id: 'hf1b',
     title: '',
     text: 'high demand in the 60s-80s really start to show effects here\nstricter regulations in place around 2000, but not followed strictly until 2007',
@@ -53,7 +58,6 @@ const steps = [
 <template>
   <StorySection id="stacked-bars" height="overscroll" width="full">
     <div class="stacked-bars-scrolly">
-      <div class="stacked-bars-lead" aria-hidden="true" />
       <PinnedScrollSection :steps="steps" :scroll-offset="0.72">
         <template #graphic="graphicProps">
           <TunaStackedBarsVisual :active-step="graphicProps.activeStep" />

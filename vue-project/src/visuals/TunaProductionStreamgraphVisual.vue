@@ -1,11 +1,11 @@
 <script setup>
-import { max, rollup, sum } from 'd3-array'
+import { rollup, sum } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { csvParse } from 'd3-dsv'
 import { format as d3Format } from 'd3-format'
 import { scaleLinear } from 'd3-scale'
 import { pointer, select } from 'd3-selection'
-import { area, stack } from 'd3-shape'
+import { area, curveMonotoneX, stack } from 'd3-shape'
 import 'd3-transition'
 import { onMounted, onUnmounted, nextTick, ref } from 'vue'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
@@ -39,8 +39,10 @@ const SERIES_LABELS = {
   MARINE: 'Farmed',
 }
 
+/** Space below the stream panel for the x-axis (aligns with stacked-bar tick / margin rhythm). */
 const X_AXIS_BAND = 34
-const SUBTITLE_BAND = 22
+/** Fixed y-scale (tonnes), matched with TunaStackedBarsVisual. */
+const Y_AXIS_MAX = 120_000
 
 function parseAquacultureRowsForYears(years) {
   const rows = csvParse(aquaCsvRaw, (d) => ({
@@ -126,44 +128,37 @@ function drawChart() {
   const width = host.clientWidth || 800
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
-  const margin = { top: 28, right: 34, bottom: 48, left: 84 }
+  const margin = { top: 48, right: 34, bottom: 48, left: 84 }
   const innerWidth = width - margin.left - margin.right
-  const available = height - margin.top - margin.bottom
-  if (innerWidth < 20 || available < 20) return
+  const innerH = height - margin.top - margin.bottom
+  if (innerWidth < 20 || innerH < X_AXIS_BAND + 40) return
 
-  const chartHeight = Math.max(120, available - SUBTITLE_BAND - X_AXIS_BAND)
-  const plotHeight = SUBTITLE_BAND + chartHeight + X_AXIS_BAND
+  /** Stream area only; x-axis sits at y = chartHeight (matches innerH − band, same pattern as TunaStackedBarsVisual inner plot). */
+  const chartHeight = innerH - X_AXIS_BAND
 
-  const svgHeight = margin.top + plotHeight + margin.bottom
-
-  svg.attr('width', width).attr('height', svgHeight)
+  svg.attr('width', width).attr('height', height)
   svg.selectAll('*').remove()
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
-  const gTop = g.append('g').attr('class', 'panel-top').attr('transform', `translate(0,${SUBTITLE_BAND})`)
+  const gTop = g.append('g').attr('class', 'panel-top')
   const gAxisX = g.append('g').attr('class', 'axis axis-x')
 
-  g.append('text')
-    .attr('class', 'panel-subtitle')
-    .attr('text-anchor', 'start')
-    .attr('x', 0)
-    .attr('y', 14)
-    .text('Bluefin Tuna: Wild Capture vs Farmed')
+
 
   const xScale = scaleLinear().domain([YEAR_START, YEAR_END]).range([0, innerWidth])
   const aquaStackGen = stack().keys(SERIES_KEYS)
   const aquaLayers = aquaStackGen(streamRows)
-  const maxY = max(aquaLayers, (series) => max(series, (point) => point[1])) ?? 1
-  const yScaleTop = scaleLinear().domain([0, Math.max(1, maxY)]).range([chartHeight, 0])
+  const yScaleTop = scaleLinear().domain([0, Y_AXIS_MAX]).range([chartHeight, 0])
   const getAquaFill = (key) => (key === 'CAPTURE' ? WILD_CAPTURE_COLOR : FARMED_COLOR)
 
   const areaTop = area()
+    .curve(curveMonotoneX)
     .x((point) => xScale(point.data.year))
     .y0((point) => yScaleTop(point[0]))
     .y1((point) => yScaleTop(point[1]))
 
-  const lineEndY = SUBTITLE_BAND + chartHeight
-  const hoverLabelY = SUBTITLE_BAND + 12
+  const lineEndY = chartHeight
+  const hoverLabelY = 12
   const hoverLineStartY = hoverLabelY + 6
 
   const hoverLine = g
@@ -255,7 +250,7 @@ function drawChart() {
       hideHoverLine()
     })
 
-  gAxisX.attr('transform', `translate(0,${SUBTITLE_BAND + chartHeight})`).call(
+  gAxisX.attr('transform', `translate(0,${chartHeight})`).call(
     axisBottom(xScale).tickFormat((d) => Number(d).toString()),
   )
 
@@ -275,8 +270,6 @@ function drawChart() {
     .attr('x', -chartHeight / 2)
     .attr('dy', '.32em')
     .attr('fill', '#334155')
-    .attr('font-size', 13)
-    .attr('font-family', 'inherit')
     .text('Catch (tonnes)')
 
   hoverLine.raise()
@@ -287,7 +280,7 @@ onMounted(() => {
   const host = hostRef.value
   if (!host) return
 
-  svg = select(host).append('svg').attr('class', 'tuna-production-countries-svg')
+  svg = select(host).append('svg').attr('class', 'tuna-production-streamgraph-svg')
   drawChart()
 
   resizeObserver = new ResizeObserver(() => drawChart())
@@ -328,54 +321,66 @@ onUnmounted(() => {
 <template>
   <div ref="wrapRef" class="streamgraph-wrap">
     <h1 class="visual-title streamgraph-title">Bluefin Tuna: Wild Capture vs Farmed</h1>
-    <aside class="legend" role="note" aria-label="Production type color key">
-      <ul class="legend-list">
-        <li class="legend-item">
-          <span class="swatch swatch-wild" />
-          <span class="legend-label">Wild capture</span>
-        </li>
-        <li class="legend-item">
-          <span class="swatch swatch-farmed" />
-          <span class="legend-label">Farmed</span>
-        </li>
-      </ul>
-    </aside>
-    <div ref="hostRef" class="d3-host" />
+    <div class="chart-plot-layer">
+      <div ref="hostRef" class="d3-host" />
+      <aside class="legend" role="note" aria-label="Production type color key">
+        <ul class="legend-list">
+          <li class="legend-item">
+            <span class="swatch swatch-wild" />
+            <span class="legend-label">Wild capture</span>
+          </li>
+          <li class="legend-item">
+            <span class="swatch swatch-farmed" />
+            <span class="legend-label">Farmed</span>
+          </li>
+        </ul>
+      </aside>
+    </div>
     <div ref="tooltipRef" class="tooltip" />
   </div>
 </template>
 
 <style scoped>
 .streamgraph-wrap {
-  --viz-height: clamp(340px, 78vh, 640px);
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: var(--viz-height);
-  max-height: 640px;
+  height: var(--viz-chart-wrap-height);
+  max-height: var(--viz-chart-wrap-max-height);
   overflow: hidden;
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
 }
 
 .streamgraph-title {
   flex-shrink: 0;
-  margin-bottom: 0.55rem;
+  margin-bottom: var(--space-visual-title-gap);
+}
+
+.chart-plot-layer {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .legend {
   position: absolute;
-  right: 0.65rem;
-  bottom: 0.65rem;
+  right: var(--viz-chart-margin-right);
+  bottom: calc(
+    var(--viz-chart-margin-bottom) + var(--viz-x-axis-band) + var(--viz-legend-above-axis-gap)
+  );
   z-index: 7;
   width: auto;
-  max-width: min(260px, 46vw);
+  max-width: min(280px, 46vw);
   overflow: auto;
-  padding: 0.42rem 0.52rem;
-  border: 1px solid rgba(15, 23, 42, 0.3);
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.9);
+  padding: var(--viz-legend-padding);
+  border: var(--viz-legend-border);
+  border-radius: 0;
+  background: var(--viz-legend-bg);
+  box-shadow: none;
 }
 
 .legend-list {
@@ -383,16 +388,17 @@ onUnmounted(() => {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.28rem;
+  gap: var(--viz-legend-list-gap);
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.12rem 0.05rem;
-  font-size: var(--font-size-visual-graph-sans);
+  padding: 0.04rem 0.05rem;
+  font-size: var(--font-size-ui);
   font-family: inherit;
+  line-height: var(--viz-legend-line-height);
   color: #0f172a;
   cursor: default;
   transition: opacity 0.18s ease;
@@ -420,9 +426,8 @@ onUnmounted(() => {
 }
 
 .d3-host {
-  flex: 1;
-  min-height: 0;
   width: 100%;
+  height: 100%;
 }
 
 .d3-host :deep(svg) {
@@ -433,9 +438,15 @@ onUnmounted(() => {
 
 .streamgraph-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: var(--font-size-visual-graph-sans);
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-size: var(--font-size-axis-tick);
+  font-family: var(--font-family-axis-tick);
+  font-weight: var(--font-weight-axis-tick);
+}
+
+.streamgraph-wrap :deep(.axis-label) {
+  font-size: var(--font-size-axis-title);
+  font-family: var(--font-family-axis-title);
+  font-weight: var(--font-weight-axis-title);
 }
 
 .streamgraph-wrap :deep(.axis path),
@@ -468,18 +479,11 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.streamgraph-wrap :deep(.panel-subtitle) {
-  fill: #0f172a;
-  font-size: var(--font-size-visual-graph-sans);
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
-}
-
 .streamgraph-wrap :deep(.hover-line-label) {
   fill: #0f172a;
-  font-size: var(--font-size-visual-graph-sans);
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
   pointer-events: none;
 }
 
@@ -495,8 +499,8 @@ onUnmounted(() => {
   font-size: 0.74rem;
   line-height: 1.35;
   box-shadow: 0 4px 16px rgba(2, 6, 23, 0.35);
-  font-family: var(--font-ui-sans);
-  font-weight: 400;
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-copy);
 }
 
 .tooltip :deep(.country) {
@@ -512,19 +516,13 @@ onUnmounted(() => {
 }
 
 @media (max-width: 900px) {
-  .streamgraph-wrap {
-    --viz-height: clamp(270px, 60vh, 480px);
-    max-height: 480px;
-  }
-
   .legend {
-    right: 0.5rem;
-    bottom: 0.5rem;
     max-width: min(220px, 56vw);
   }
 }
 
 @media (max-width: 640px) {
+  /* Static flow under chart; box style still matches shared tokens */
   .legend {
     position: static;
     margin-top: 0.55rem;

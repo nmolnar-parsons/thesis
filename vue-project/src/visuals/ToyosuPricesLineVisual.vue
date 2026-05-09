@@ -443,12 +443,12 @@ onUnmounted(() => {
   height: var(--viz-height);
   max-height: 560px;
   overflow: hidden;
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
 }
 
 .linechart-title {
-  margin-bottom: 0.45rem;
+  margin-bottom: var(--space-visual-title-gap);
 }
 
 .d3-host {
@@ -464,9 +464,9 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.axis text) {
   fill: #475569;
-  font-size: var(--font-size-visual-graph-sans);
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-size: var(--font-size-axis-tick);
+  font-family: var(--font-family-axis-tick);
+  font-weight: var(--font-weight-axis-tick);
 }
 
 .linechart-wrap :deep(.axis path),
@@ -476,9 +476,9 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.axis-label) {
   fill: #334155;
-  font-size: var(--font-size-visual-graph-sans);
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-size: var(--font-size-axis-title);
+  font-family: var(--font-family-axis-title);
+  font-weight: var(--font-weight-axis-title);
 }
 
 .linechart-wrap :deep(.series-line) {
@@ -508,9 +508,9 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.hover-line-label) {
   fill: #0f172a;
-  font-size: var(--font-size-visual-graph-sans);
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-size: var(--font-size-ui);
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
   pointer-events: none;
 }
 
@@ -541,7 +541,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.12rem 0.05rem;
-  font-size: var(--font-size-visual-graph-sans);
+  font-size: var(--font-size-ui);
   font-family: inherit;
   color: #0f172a;
   cursor: pointer;
@@ -550,7 +550,7 @@ onUnmounted(() => {
 
 .legend-item.is-active {
   opacity: 1;
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-weight: var(--font-weight-ui);
 }
 
 .legend-item.is-inactive {
@@ -580,8 +580,8 @@ onUnmounted(() => {
   font-size: 0.7rem;
   line-height: 1.25;
   box-shadow: 0 4px 16px rgba(2, 6, 23, 0.35);
-  font-family: var(--font-ui-sans);
-  font-weight: 400;
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-copy);
 }
 
 @media (max-width: 900px) {

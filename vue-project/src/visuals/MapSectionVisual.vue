@@ -16,8 +16,8 @@ const COUNT_TO_TONNE = 250 / 1000
 /** Lowest tier on catch scale (tonnes = 0): base “ocean” fill. */
 const CATCH_SCALE_ZERO_COLOR = '#13265f'
 /** Upper bounds for each ramp step (Mapbox `step`: default color applies below first stop). */
-const CATCH_TONNE_STEP_STOPS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000]
-/** Must align with stops: index 0 = below 25 t, then one color per interval. */
+const CATCH_TONNE_STEP_STOPS = [100, 250, 500, 1000, 2000, 4000, 7000, 12000, 18000, 28000]
+/** Must align with stops: index 0 = below 100 t, then one color per interval. */
 const CATCH_COLOR_RAMP = [
   CATCH_SCALE_ZERO_COLOR,
   '#0b3c78',
@@ -47,8 +47,8 @@ const STEP_FULLVIEW_LINGER_END = 8
 const STEP_MEDITERRANEAN = 9
 /** Last step where the regional year advances (then 2023 through callout + linger). */
 const STEP_MEDITERRANEAN_YEAR_END = 11
-/** First step showing the basin ellipse; stays visible through linger steps. */
-const STEP_MEDITERRANEAN_CALLOUT_START = 12
+/** First Mediterranean beat after year scrub, fixed at 2023. */
+const STEP_MEDITERRANEAN_2023_CALLOUT = STEP_MEDITERRANEAN_YEAR_END + 1
 /** Extra pacing on Med at 2023 while the ellipse remains (mirrors global linger). */
 const STEP_MEDITERRANEAN_LINGER_START = 13
 const STEP_MEDITERRANEAN_LINGER_END = 16
@@ -56,6 +56,13 @@ const STEP_MEDITERRANEAN_LINGER_END = 16
 const STEP_MEDITERRANEAN_END = STEP_MEDITERRANEAN_LINGER_END
 /** Global return + trailing scroll padding (indices 17–19 → m18–m20). */
 const STEP_RETURN_FULL = 17
+const STEP_ANIMATION_DURATION_MS = 2600
+
+function stepAnimationEasing(t) {
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - ((-2 * t + 2) ** 3) / 2
+}
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
@@ -170,7 +177,7 @@ const narrativeCopy = computed(() => {
   if (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep <= STEP_MEDITERRANEAN_YEAR_END) {
     return MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION
   }
-  if (props.activeStep === STEP_MEDITERRANEAN_CALLOUT_START) {
+  if (props.activeStep === STEP_MEDITERRANEAN_2023_CALLOUT) {
     return MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION
   }
   if (
@@ -186,9 +193,11 @@ const narrativeCopy = computed(() => {
 })
 
 function overlayOpacity() {
-  return props.activeStep >= STEP_MEDITERRANEAN_CALLOUT_START && props.activeStep <= STEP_MEDITERRANEAN_END
-    ? 1
-    : 0
+  const step = props.activeStep
+  // Only show the basin annotation during the pre-zoom global 2023 linger;
+  // once the camera has eased into the Med, the zoom itself replaces the cue.
+  const isGlobalFrozen2023 = step >= STEP_FULLVIEW_LINGER_START && step <= STEP_FULLVIEW_LINGER_END
+  return isGlobalFrozen2023 ? 1 : 0
 }
 
 function formatCount(v) {
@@ -205,14 +214,57 @@ const tunaColorExpression = computed(() => {
   return buildCatchTonnesStepExpression(combinedTonnes)
 })
 
+/** Mapbox Streets v8 `class` values to keep on `water-point-label`. */
+const OCEAN_LABEL_CLASSES = ['ocean']
+const OCEAN_LABEL_LAYER_ID = 'water-point-label'
+/** Names matched against `name_en`/`name` to suppress (case-insensitive substring). */
+const OCEAN_LABEL_SUPPRESS_NAMES = ['Arctic Ocean']
+/** Named non-ocean features that join the layer once zoomed past the threshold. */
+const OCEAN_LABEL_ZOOM_REVEAL_NAMES = ['Mediterranean Sea']
+const OCEAN_LABEL_ZOOM_REVEAL_MIN_ZOOM = 3
+
 function hideMapLabels() {
   if (!map || !mapReady.value) return
   const layers = map.getStyle()?.layers || []
   for (const layer of layers) {
-    if (layer.type === 'symbol') {
-      map.setLayoutProperty(layer.id, 'visibility', 'none')
-    }
+    if (layer.type !== 'symbol') continue
+    if (layer.id === OCEAN_LABEL_LAYER_ID) continue
+    map.setLayoutProperty(layer.id, 'visibility', 'none')
   }
+}
+
+function buildOceanLabelFilter(zoom) {
+  const nameExpr = ['coalesce', ['get', 'name_en'], ['get', 'name'], '']
+  // Always require: not in suppress list. Then OR together the per-zoom allowlists.
+  const allowed = ['any', ['match', ['get', 'class'], OCEAN_LABEL_CLASSES, true, false]]
+  if (zoom >= OCEAN_LABEL_ZOOM_REVEAL_MIN_ZOOM) {
+    allowed.push(['match', nameExpr, OCEAN_LABEL_ZOOM_REVEAL_NAMES, true, false])
+  }
+  return [
+    'all',
+    ['!', ['match', nameExpr, OCEAN_LABEL_SUPPRESS_NAMES, true, false]],
+    allowed,
+  ]
+}
+
+function refreshOceanLabelFilter() {
+  if (!map || !mapReady.value) return
+  if (!map.getLayer(OCEAN_LABEL_LAYER_ID)) return
+  map.setFilter(OCEAN_LABEL_LAYER_ID, buildOceanLabelFilter(map.getZoom()))
+}
+
+function showOceanLabelsOnly() {
+  if (!map || !mapReady.value) return
+  if (!map.getLayer(OCEAN_LABEL_LAYER_ID)) return
+  refreshOceanLabelFilter()
+  map.on('zoom', refreshOceanLabelFilter)
+  map.setLayoutProperty(OCEAN_LABEL_LAYER_ID, 'visibility', 'visible')
+  map.setPaintProperty(OCEAN_LABEL_LAYER_ID, 'text-color', '#ffffff')
+  map.setPaintProperty(OCEAN_LABEL_LAYER_ID, 'text-opacity', 0.6)
+  map.setPaintProperty(OCEAN_LABEL_LAYER_ID, 'text-halo-color', 'rgba(0, 0, 0, 0.55)')
+  map.setPaintProperty(OCEAN_LABEL_LAYER_ID, 'text-halo-width', 1.2)
+  // Lift labels above the tuna fill and continent overlay we added on top.
+  map.moveLayer(OCEAN_LABEL_LAYER_ID)
 }
 
 function setProjection() {
@@ -248,15 +300,27 @@ function applyTunaCatchFillSeamMitigation() {
 function cameraForStep(stepIndex) {
   const cameraPadding = { top: 24, right: 24, bottom: 24, left: 24 }
   if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_END) {
-    return { key: 'mediterranean', center: [14, 38], zoom: 4.35, duration: 2600, padding: cameraPadding }
+    return {
+      key: 'mediterranean',
+      center: [14, 38],
+      zoom: 4.35,
+      duration: STEP_ANIMATION_DURATION_MS,
+      padding: cameraPadding,
+    }
   }
-  return { key: 'global', center: [0, 0], zoom: 1.25, duration: 2600, padding: cameraPadding }
+  return {
+    key: 'global',
+    center: [0, 0],
+    zoom: 1.25,
+    duration: STEP_ANIMATION_DURATION_MS,
+    padding: cameraPadding,
+  }
 }
 
 function updateCameraForStep(stepIndex, force = false) {
   if (!map || !mapReady.value) return
   const nextCamera = cameraForStep(stepIndex)
-  if (!force && activeCameraKey === nextCamera.key) return
+  if (!force && activeCameraKey === nextCamera.key && props.activeStep !== stepIndex) return
   activeCameraKey = nextCamera.key
   map.stop()
   map.easeTo({
@@ -264,6 +328,7 @@ function updateCameraForStep(stepIndex, force = false) {
     zoom: nextCamera.zoom,
     padding: nextCamera.padding,
     duration: nextCamera.duration,
+    easing: stepAnimationEasing,
     essential: true,
   })
 }
@@ -290,6 +355,9 @@ onMounted(() => {
     zoom: 1.5,
     projection: DEFAULT_PROJECTION,
     renderWorldCopies: true,
+    /** No default AttributionControl (avoids the compact “i” UI); text links are in the template. */
+    attributionControl: false,
+    logoPosition: 'bottom-left',
   })
 
   map.on('load', () => {
@@ -326,6 +394,7 @@ onMounted(() => {
 
     mapReady.value = true
     hideMapLabels()
+    showOceanLabelsOnly()
     setProjection()
     neutralizeWaterColor()
     applyTunaCatchFillSeamMitigation()
@@ -368,15 +437,17 @@ onUnmounted(() => {
     <div class="hud-row">
       <div class="metrics-card">
         <p class="year-text">{{ currentYear }}</p>
-        <p v-if="!minimalMode" class="metric-line">
-          <span class="metric-caption">Total fish caught:</span>
-          <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
-        </p>
-        <p v-if="!minimalMode" class="metric-line metric-line-temp">
-          <span class="metric-caption">Global ocean temperature:</span>
-          <span>—</span>
-        </p>
-        <p v-if="!minimalMode && narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
+        <div v-if="!minimalMode" class="metrics-card-details">
+          <p class="metric-line">
+            <span class="metric-caption">Total fish caught:</span>
+            <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
+          </p>
+          <p class="metric-line metric-line-temp">
+            <span class="metric-caption">Global ocean temperature:</span>
+            <span>—</span>
+          </p>
+          <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
+        </div>
       </div>
     </div>
 
@@ -386,8 +457,20 @@ onUnmounted(() => {
         aria-hidden="true"
         :style="{ opacity: overlayOpacity() }"
       >
-        <div class="callout-shape mediterranean-basin-shape" />
-        <p class="callout-label mediterranean-callout-label">warming quickly!</p>
+        <svg
+          class="callout-shape mediterranean-basin-shape"
+          viewBox="0 0 400 145"
+          preserveAspectRatio="xMidYMid meet"
+          aria-hidden="true"
+        >
+          <path
+            d="M179.03,170.1c-40.81,0-74.13-3.38-104.86-10.64-16.8-3.97-31.03-9.48-43.49-16.86-10.19-6.03-17.38-12.15-22.64-19.26-9.44-12.76-10.55-26-3.4-40.47,3.54-7.15,8.88-13.85,16.81-21.07,16.03-14.6,35.85-26.2,62.38-36.52,26.76-10.41,57.07-17.55,92.64-21.85,18.92-2.28,38.6-3.44,58.5-3.44s41.82,1.22,63.59,3.63c40.85,4.52,73.51,11.77,102.78,22.81,3.46,1.3,6.92,2.93,10.28,4.5l2.07.97c2.67,1.24,2.32,2.22,1.98,3.15-.1.28-.2.56-1.01.56-.46,0-1.24-.11-2.39-.63-21.74-9.85-45.5-14.84-66.46-19.25-23.8-5-49.22-8.23-80-10.16-10.48-.66-21.04-.99-31.39-.99-37.42,0-74.51,4.37-110.26,12.98-27.22,6.56-50.79,15.66-72.06,27.82-13.7,7.84-23.96,15.64-32.28,24.56-4,4.29-7.15,8.38-9.62,12.5-8.83,14.73-7.26,29.43,4.43,41.38,5.29,5.41,11.77,10.49,19.26,15.1,16.66,10.24,35.33,14.95,49.73,17.9,29.56,6.07,61.49,8.77,103.54,8.77h2.09c57.96-1.32,107.47-7.04,151.43-17.5,14.46-3.44,31.36-8.03,47.12-16,7.58-3.83,13.93-7.82,19.43-12.2,4.29-3.41,8.32-8.19,11.34-13.45,7.27-12.66,5.07-25.78-5.89-35.11-5.61-4.78-12.33-9.11-19.97-12.88-18.08-8.92-38.19-15.93-63.31-22.05-18.76-4.57-37.49-6.22-54.94-7.32-.49-.03-.99-.05-1.49-.07-1.5-.05-2.91-.11-3.85-.53-.44-.2-1.1-.81-1.45-1.26.32-.62,1.09-1.54,1.92-1.99.1-.05.43-.18,1.44-.18.41,0,.82.02,1.23.03.48.02.96.04,1.43.04h.17c.69,0,1.38-.01,2.06-.01,26.57,0,53.86,4.94,83.42,15.11,12.78,4.4,25.78,9.76,39.74,16.39,6.07,2.88,12.33,7.26,18.11,12.65,10.55,9.85,13.03,23.34,6.79,37.01-3.07,6.75-7.78,12.61-14.4,17.94-12.19,9.81-26.41,15.55-37.43,19.45-22.84,8.09-47.84,13.8-81.05,18.51-32.71,4.64-66.05,7.26-99.1,7.79-4.43.07-8.8.11-12.99.11Z"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
       </div>
     </div>
 
@@ -402,16 +485,30 @@ onUnmounted(() => {
         <span>high catch</span>
       </div>
     </aside>
+
+    <div v-if="!tokenMissing" class="map-attrib-bar">
+      <span class="map-attrib-bar__logo-gap" aria-hidden="true" />
+      <span class="map-attrib-sep" aria-hidden="true">·</span>
+      <p class="map-attribution-text">
+        <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener noreferrer">© Mapbox</a>
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a>
+        <a href="https://apps.mapbox.com/feedback/" target="_blank" rel="noopener noreferrer">Improve this map</a>
+      </p>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .map-frame {
+  --map-attrib-chrome-font-size: 0.75rem;
+  /* Align bottom chrome with year card left edge (.hud-row); bottom with legend */
+  --map-hud-inset-left: 0.85rem;
+  --map-bottom-chrome: 0.45rem;
   position: relative;
   width: 100%;
   height: 100%;
-  font-family: var(--font-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
 }
 
 .map-title {
@@ -419,6 +516,8 @@ onUnmounted(() => {
   top: 0.6rem;
   left: 50%;
   z-index: 9;
+  margin: 0;
+  padding: 0;
   transform: translateX(-50%);
   width: calc(100% - 2rem);
   pointer-events: none;
@@ -430,23 +529,97 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+/* Inset only — do not override logo dimensions (Mapbox default wordmark size) */
+.map-host :deep(.mapboxgl-ctrl-bottom-left) {
+  left: var(--map-hud-inset-left);
+  bottom: var(--map-bottom-chrome);
+}
+
+/* Optical alignment with attribution row; does not move legend or .map-attrib-bar */
+.map-host :deep(.mapboxgl-ctrl-logo) {
+  /* Was 50% down; nudge up by 1/4 logo height → net 25% down from default */
+  transform: translateY(40%);
+}
+
+.map-attrib-bar {
+  position: absolute;
+  left: var(--map-hud-inset-left);
+  bottom: var(--map-bottom-chrome);
+  z-index: 6;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: min(calc(100% - 10rem), 520px);
+  font-size: var(--map-attrib-chrome-font-size);
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+/* ~default wordmark width so dot + attribution clear the logo */
+.map-attrib-bar__logo-gap {
+  flex: 0 0 5.5rem;
+  width: 5.5rem;
+  pointer-events: none;
+}
+
+.map-attrib-sep {
+  flex-shrink: 0;
+  color: rgba(15, 23, 42, 0.4);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.map-attribution-text {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  font: inherit;
+  font-size: 1em;
+  color: rgba(15, 23, 42, 0.75);
+  pointer-events: auto;
+}
+
+.map-attribution-text a {
+  flex-shrink: 0;
+  color: rgba(15, 23, 42, 0.55);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Nudge up by 1px so year cap-height lines up with .map-title (card top border) */
 .hud-row {
   position: absolute;
-  left: 0.85rem;
-  top: clamp(2.8rem, 6vh, 3.6rem);
+  left: var(--map-hud-inset-left);
+  top: calc(0.6rem - 1px);
   z-index: 7;
   max-width: calc(100% - 1.7rem);
 }
 
 .metrics-card {
+  box-sizing: border-box;
   margin: 0;
-  padding: 0.7rem 0.8rem;
-  border-radius: 0.55rem;
+  padding: 0 0.8rem 0.7rem 0.8rem;
+  border-radius: 0;
   border: 1px solid rgba(15, 23, 42, 0.2);
   background: rgba(255, 255, 255, 0.92);
   color: #000000;
-  min-width: min(280px, calc(100% - 2rem));
-  max-width: min(440px, calc(100vw - 2rem));
+  width: fit-content;
+  max-width: min(440px, 100%);
+}
+
+.metrics-card-details {
+  margin-top: var(--space-visual-title-gap);
+  padding-top: var(--space-visual-title-gap);
+  border-top: 1px solid rgba(15, 23, 42, 0.14);
 }
 
 .narrative-copy {
@@ -469,54 +642,57 @@ onUnmounted(() => {
 
 .map-legend {
   position: absolute;
-  right: 0.85rem;
-  bottom: 0.85rem;
+  right: var(--map-hud-inset-left);
+  bottom: var(--map-bottom-chrome);
   z-index: 7;
   width: min(300px, 72vw);
-  padding: 0.45rem 0.55rem;
-  border: 1px solid rgba(15, 23, 42, 0.3);
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.9);
+  padding: var(--viz-legend-padding);
+  border: var(--viz-legend-border);
+  border-radius: 0;
+  background: var(--viz-legend-bg);
+  box-shadow: none;
 }
 
 .map-legend-bar {
   width: 100%;
   height: 12px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid rgba(15, 23, 42, 0.18);
 }
 
 .map-legend-labels {
-  margin-top: 0.38rem;
+  margin-top: 0.28rem;
   display: flex;
   justify-content: space-between;
-  font-size: var(--font-size-visual-graph-sans);
+  font-size: var(--font-size-ui);
+  line-height: var(--viz-legend-line-height);
   color: #0f172a;
 }
 
 .year-text {
-  margin: 0 0 0.35rem;
+  margin: 0;
+  padding: 0;
   color: #000000;
-  font-size: clamp(1.6rem, 2.9vw, 2.4rem);
-  line-height: 1;
-  font-weight: var(--font-weight-visual-graph-sans);
-  letter-spacing: 0.02em;
+  font-family: var(--font-visual-title);
+  font-size: var(--font-size-visual-title);
+  font-weight: var(--font-weight-visual-title);
+  line-height: var(--line-height-visual-title);
 }
 
 .metric-line {
   margin: 0.2rem 0;
   color: #000000;
-  font-size: var(--font-size-visual-graph-sans);
+  font-size: var(--font-size-ui);
   line-height: 1.35;
 }
 
 .metric-caption {
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-weight: var(--font-weight-ui);
   margin-right: 0.35rem;
 }
 
 .metric-value {
-  font-weight: var(--font-weight-visual-graph-sans);
+  font-weight: var(--font-weight-ui);
 }
 
 .metric-line-temp {
@@ -537,58 +713,51 @@ onUnmounted(() => {
 }
 
 .mediterranean-callout {
-  left: 50%;
-  top: 44%;
-  width: min(118vmin, calc(100% - 2.5rem));
-  height: min(88vmin, calc(92% - 3rem));
-  min-height: clamp(260px, 52vh, 720px);
+  left: 52%;
+  top: 30%;
+  width: min(27.2vmin, 344px);
+  aspect-ratio: 427.36 / 170.1;
   transform: translate(-50%, -50%);
 }
 
 .callout-shape {
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  border-radius: 50%;
+  display: block;
+  overflow: visible;
 }
 
-.mediterranean-basin-shape {
-  border: 3px solid rgba(220, 38, 38, 0.82);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.16) inset,
-    0 0 24px rgba(220, 38, 38, 0.18);
+.mediterranean-basin-shape path {
+  fill: none;
+  stroke: rgb(255, 255, 255);
+  stroke-width: 3.5;
 }
 
-.callout-label {
-  position: absolute;
-  right: -12%;
-  top: -10%;
-  margin: 0;
-  color: rgba(185, 28, 28, 0.96);
-  font-size: var(--font-size-visual-graph-sans);
-  font-weight: var(--font-weight-visual-graph-sans);
-  transform: rotate(20deg);
-  text-transform: lowercase;
-}
+@media (max-width: 520px) {
+  .map-frame {
+    --map-attrib-chrome-font-size: 0.65rem;
+  }
 
-.mediterranean-callout-label {
-  top: clamp(0.75rem, 3.5vmin, 1.5rem);
-  right: clamp(0.65rem, 3vmin, 1.85rem);
-  transform: rotate(17deg);
+  .map-attrib-bar__logo-gap {
+    flex: 0 0 5rem;
+    width: 5rem;
+  }
+
+  .map-attrib-bar {
+    flex-wrap: wrap;
+    max-width: calc(100% - 1rem);
+  }
+
+  .map-attribution-text {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 900px) {
   .mediterranean-callout {
-    width: min(130vmin, calc(100% - 2rem));
-    height: min(92vmin, calc(94% - 4rem));
-    top: 45%;
-    min-height: clamp(240px, 48vh, 560px);
-  }
-
-  .mediterranean-callout-label {
-    top: clamp(0.5rem, 2vmin, 1.1rem);
-    right: clamp(0.45rem, 2vmin, 1.2rem);
-    font-size: var(--font-size-visual-graph-sans);
+    left: 50%;
+    top: 30%;
+    width: min(41.6vmin, 272px);
   }
 
   .map-title {
@@ -596,11 +765,12 @@ onUnmounted(() => {
     width: calc(100% - 1rem);
   }
 
+  .hud-row {
+    top: calc(0.4rem - 1px);
+  }
+
   .map-legend {
-    right: 0.55rem;
-    bottom: 0.55rem;
     width: min(240px, 76vw);
-    padding: 0.38rem 0.48rem;
   }
 }
 
@@ -617,8 +787,8 @@ onUnmounted(() => {
   background: rgba(254, 242, 242, 0.92);
   color: #991b1b;
   font-size: 0.8rem;
-  font-family: var(--font-ui-sans);
-  font-weight: 400;
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-copy);
 }
 
 </style>

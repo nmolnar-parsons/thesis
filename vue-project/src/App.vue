@@ -33,7 +33,7 @@ onUnmounted(() => {
   <main class="story-page">
     <Intro />
     <FishGrid :minimal-mode="minimalMode" />
-    <ToyosuPrices v-if="!minimalMode" />
+    <!-- <ToyosuPrices v-if="!minimalMode" /> -->
     <StackedBars :minimal-mode="minimalMode" />
     <Map :minimal-mode="minimalMode" />
     <CountryProduction :minimal-mode="minimalMode" />

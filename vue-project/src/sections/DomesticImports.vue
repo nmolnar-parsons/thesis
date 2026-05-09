@@ -3,12 +3,19 @@ import CopyBlock from '../components/layout/CopyBlock.vue'
 import SectionGrid from '../components/layout/SectionGrid.vue'
 import StorySection from '../components/story/StorySection.vue'
 import DistrictDonutsVisual from '../visuals/DistrictDonutsVisual.vue'
+
+defineProps({
+  minimalMode: {
+    type: Boolean,
+    default: false,
+  },
+})
 </script>
 
 <template>
   <StorySection id="domestic-imports" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="start">
-      <div class="story-copy domestic-copy">
+      <div v-if="!minimalMode" class="story-copy domestic-copy">
         <CopyBlock title="Where is your tuna coming from?">
           <p>
             When you eat sushi in the United States, it may be coming from one of these countries.

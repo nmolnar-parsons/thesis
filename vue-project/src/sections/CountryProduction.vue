@@ -2,7 +2,7 @@
 import CopyBlock from '../components/layout/CopyBlock.vue'
 import SectionGrid from '../components/layout/SectionGrid.vue'
 import StorySection from '../components/story/StorySection.vue'
-import TunaProductionCountriesVisual from '../visuals/TunaProductionCountriesVisual.vue'
+import TunaProductionStreamgraphVisual from '../visuals/TunaProductionStreamgraphVisual.vue'
 
 defineProps({
   minimalMode: {
@@ -24,7 +24,7 @@ defineProps({
         </CopyBlock>
       </div>
       <div class="production-visual">
-        <TunaProductionCountriesVisual />
+        <TunaProductionStreamgraphVisual />
       </div>
     </SectionGrid>
   </StorySection>

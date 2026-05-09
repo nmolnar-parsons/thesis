@@ -4,7 +4,6 @@ import StorySection from '../components/story/StorySection.vue'
 import bluefinStill from '../visuals/intro/bluefin-still.jpg'
 import fishingBoatTuna from '../visuals/intro/fishing-boat-tuna.png'
 import tsukijiAuction from '../visuals/intro/tsukiji-auction.png'
-import tunaNigiri from '../visuals/intro/tuna-nigiri.jpg'
 import tunaNigiriAlt from '../visuals/intro/tuna-nigiri-alt.jpg'
 
 const columns = [
@@ -26,19 +25,10 @@ const columns = [
   },
 ]
 
-/** One column unroll occupies this fraction of scrub 0→1; next starts at (2/3)·phase of previous ⇒ total phase = 1. */
-const COLUMN_PHASE = 1 / 3
-const COL_START_FRAC = [0, 2 / 9, 4 / 9, 2 / 3]
-
 const scrollerEl = ref(null)
 /** Overall 0→1 while intro scroller travels through viewport; tail before unpin is dwell. */
 const scrollRaw = ref(0)
 const prefersReducedMotion = ref(false)
-
-const MAX_BLUR_PX = 18
-
-/** Column stagger completes when scrollRaw reaches this proportion. */
-const COLUMNS_COMPLETE_AT_RAW = 0.66
 
 /** Title opacity ramps with scroll; hits 1 at TITLE_FADE_END_RAW (before scrollRaw === 1). */
 const TITLE_FADE_START_RAW = 0.48
@@ -47,19 +37,6 @@ const TITLE_FADE_END_RAW = 0.82
 function clamp01(x) {
   return Math.min(1, Math.max(0, x))
 }
-
-function columnLocalProgress(i, p) {
-  const start = COL_START_FRAC[i]
-  return clamp01((p - start) / COLUMN_PHASE)
-}
-
-const columnDrive = computed(() =>
-  prefersReducedMotion.value ? 1 : clamp01(scrollRaw.value / COLUMNS_COMPLETE_AT_RAW),
-)
-
-const columnProgress = computed(() =>
-  columns.map((_, i) => columnLocalProgress(i, columnDrive.value)),
-)
 
 const titleOpacity = computed(() =>
   prefersReducedMotion.value
@@ -73,20 +50,6 @@ const titleOpacity = computed(() =>
 const titleAriaHidden = computed(() =>
   prefersReducedMotion.value ? false : titleOpacity.value <= 0.02,
 )
-
-/** Blur sits in an overflow-hidden slab from the column top; slab height shrinks so edges are rectangular, not clip-path/filter feathering. */
-function blurPaneStyle(lp) {
-  if (prefersReducedMotion.value)
-    return { display: 'none' }
-  const remain = clamp01(lp)
-  return { height: `${(1 - remain) * 100}%` }
-}
-
-function blurLayerFilterStyle() {
-  if (prefersReducedMotion.value)
-    return {}
-  return { filter: `blur(${MAX_BLUR_PX}px)` }
-}
 
 function syncScrollRawFromViewport() {
   const root = scrollerEl.value
@@ -140,16 +103,7 @@ onUnmounted(() => {
           <div class="intro-grid">
             <div v-for="(col, index) in columns" :key="index" class="intro-col">
               <div class="intro-col-stack">
-                <img class="intro-col-img intro-col-img--base" :src="col.src" :alt="col.alt" />
-                <div class="intro-blur-pane" :style="blurPaneStyle(columnProgress[index])">
-                  <img
-                    class="intro-col-img intro-col-img--blur-inner"
-                    :src="col.src"
-                    alt=""
-                    aria-hidden="true"
-                    :style="blurLayerFilterStyle()"
-                  />
-                </div>
+                <img class="intro-col-img" :src="col.src" :alt="col.alt" />
               </div>
             </div>
           </div>
@@ -161,7 +115,7 @@ onUnmounted(() => {
             }"
             :aria-hidden="titleAriaHidden"
           >
-            The Last Sushi in the World
+            The Last Sushi <br>in the World
           </h1>
         </div>
       </div>
@@ -227,37 +181,6 @@ onUnmounted(() => {
   vertical-align: top;
 }
 
-.intro-blur-pane {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  overflow: hidden;
-  z-index: 1;
-  border-radius: 0;
-  pointer-events: none;
-}
-
-.intro-col-img--blur-inner {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100cqh;
-  max-height: none;
-  box-sizing: border-box;
-  object-fit: cover;
-  object-position: center;
-  border-radius: 0;
-  will-change: filter;
-}
-
-@supports not (height: 1cqh) {
-  .intro-col-img--blur-inner {
-    height: min(100vh, 100dvh);
-  }
-}
-
 .intro-title {
   position: absolute;
   inset: 0;
@@ -269,13 +192,13 @@ onUnmounted(() => {
   padding: clamp(1rem, 3vw, 2rem);
   text-align: center;
   pointer-events: none;
-  font-family: var(--font-title-bebas);
+  font-family: var(--font-title);
   font-size: clamp(3rem, 11vw, 8rem);
   font-weight: 400;
+  letter-spacing: -0.02em;
   line-height: 1;
-  text-transform: lowercase;
-  color: #fff;
-  -webkit-text-stroke: 1px rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  /* -webkit-text-stroke: 1px rgba(0, 0, 0, 0.95); */
   text-shadow:
     0 0 2px #000,
     0 0 4px rgba(0, 0, 0, 0.8),

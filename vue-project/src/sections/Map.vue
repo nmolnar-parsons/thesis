@@ -18,20 +18,18 @@ const steps = [
   { id: 'm3', title: '', text: '' },
   { id: 'm4', title: '', text: '' },
   { id: 'm5', title: '', text: '' },
-  // 5–8: global view linger (pacing)
+  // 5–7: global view linger (pacing), 8: basin annotation on global view
   { id: 'm6', title: '', text: '' },
   { id: 'm7', title: '', text: '' },
-  // 9–11: Mediterranean year scrub (2007 → 2023)
+  // 9–11: Mediterranean zoom + year scrub (2007 → 2023); annotation hidden
   { id: 'm10', title: '', text: '' },
   { id: 'm11', title: '', text: '' },
   { id: 'm12', title: '', text: '' },
-  // 12: basin annotation appears (ellipse persists through next steps)
+  // 12: Mediterranean callout copy beat (no annotation)
   { id: 'm13', title: '', text: '' },
-  // 13–16: Mediterranean linger at 2023 (ellipse stays visible)
+  // 13–16: Mediterranean linger at 2023
   { id: 'm14', title: '', text: '' },
   { id: 'm15', title: '', text: '' },
-  { id: 'm16', title: '', text: '' },
-  { id: 'm17', title: '', text: '' },
   // 17–19: return to global + end padding
   { id: 'm18', title: '', text: '' },
   { id: 'm19', title: '', text: '' },

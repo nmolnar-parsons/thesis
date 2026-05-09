@@ -56,7 +56,7 @@ import StorySection from '../components/story/StorySection.vue'
   position: relative;
   z-index: 1;
   margin: 0;
-  font-family: var(--font-title-bebas);
+  font-family: var(--font-title);
   font-weight: 350;
   font-size: clamp(3rem, 11vw, 8rem);
   line-height: 0.94;
