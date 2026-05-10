@@ -58,7 +58,7 @@ const steps = [
 
 <style scoped>
 #map :deep(.sticky-graphic) {
-  background: #13265f;
+  background: var(--color-default-blue);
 }
 
 #map :deep(.step-column) {

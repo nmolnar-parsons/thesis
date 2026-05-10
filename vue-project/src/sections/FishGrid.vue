@@ -1,8 +1,13 @@
 <script setup>
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computeFishBreakdownLayout, parse2023Counts } from '../composables/useFishBreakdownLayout.js'
+import csvRaw from '../data/toyosu_tuna_2023.csv?raw'
+import pacificFishUrl from '../visuals/tuna-images/pacific-bluefin.png'
 import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import CopyBlock from '../components/layout/CopyBlock.vue'
 import BreakdownFishVisual from '../visuals/BreakdownFishVisual.vue'
+import FishGridAnnotationLayer from '../components/story/FishGridAnnotationLayer.vue'
 
 defineProps({
   minimalMode: {
@@ -11,31 +16,104 @@ defineProps({
   },
 })
 
+const fishAspect = ref(2.3)
+const containerRef = ref(null)
+const containerSize = ref({ width: 0, height: 0 })
+
+const fishTotals = computed(() => parse2023Counts(csvRaw))
+
+const layout = computed(() => {
+  const { width, height } = containerSize.value
+  if (!width || !height) return null
+  return computeFishBreakdownLayout(width, height, fishAspect.value, fishTotals.value)
+})
+
+let ro = null
+
+onMounted(() => {
+  const img = new Image()
+  img.onload = () => {
+    if (img.naturalWidth && img.naturalHeight) {
+      fishAspect.value = img.naturalWidth / img.naturalHeight
+    }
+  }
+  img.src = pacificFishUrl
+
+  const el = containerRef.value
+  if (el && typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect
+      if (cr) {
+        containerSize.value = { width: cr.width, height: cr.height }
+      }
+    })
+    ro.observe(el)
+    containerSize.value = { width: el.clientWidth, height: el.clientHeight }
+  }
+})
+
+onUnmounted(() => {
+  ro?.disconnect()
+})
+
+/** Single-fish callout (steps 1–3). */
+const singleFishAnnotations = [
+  {
+    id: 'single-bluefin',
+    body: 'This fish stands in for one animal counted in the 2023 Toyosu auction records.',
+  },
+]
+
 const steps = [
   {
-    id: 'fish-grid-single-hold',
+    id: 'fish-grid-single-fade',
     title: 'One fish',
-    text: 'A single Pacific bluefin appears at full scale.',
+    text: 'A single Pacific bluefin comes into view.',
+  },
+  {
+    id: 'fish-grid-single-annotate',
+    title: 'One fish',
+    text: 'Labels clarify what you are looking at before we zoom out.',
+  },
+  {
+    id: 'fish-grid-single-linger-a',
+    title: 'One fish',
+    text: 'Hold on the lone fish for a beat.',
+  },
+  {
+    id: 'fish-grid-single-linger-b',
+    title: 'One fish',
+    text: 'Another linger so the scale lands before the field expands.',
   },
   {
     id: 'fish-grid-single-to-week',
     title: 'One fish',
-    text: 'Zoom out to reveal a week of fish.',
+    text: 'Zoom out to reveal a week of fish at the same resolution.',
   },
   {
     id: 'fish-grid-week-hold',
     title: 'A week of fish',
-    text: "A week of fish remains on screen before the next zoom out.",
+    text: 'Each icon is still one fish—now enough to fill a representative week in the data.',
+  },
+  {
+    id: 'fish-grid-week-linger',
+    title: 'A week of fish',
+    text: 'Stay on the week grid while the copy settles.',
   },
   {
     id: 'fish-grid-week-to-year',
     title: 'A week of fish',
-    text: 'Zoom out again to reveal the full year.',
+    text: 'Zoom out again to reveal roughly a full year of fish in the dataset.',
   },
   {
     id: 'fish-grid-year-hold',
     title: 'A year of fish',
-    text: 'The full 2023 fish field stays visible.',
+    text: 'The full 2023 fish field stays readable at a glance.',
+  },
+  {
+    id: 'fish-grid-year-linger',
+    title: 'A year of fish',
+    text: 'Linger on the year before the story continues.',
   },
 ]
 </script>
@@ -44,10 +122,18 @@ const steps = [
   <StorySection id="fish-grid" height="overscroll" width="full">
     <PinnedScrollSection :steps="steps" :scroll-offset="0.65">
       <template #graphic="graphicProps">
-        <BreakdownFishVisual
-          :active-step="graphicProps.activeStep"
-          :step-progress="graphicProps.stepProgress"
-        />
+        <div ref="containerRef" class="fish-grid-graphic-wrap">
+          <BreakdownFishVisual
+            :active-step="graphicProps.activeStep"
+            :step-progress="graphicProps.stepProgress"
+          />
+          <FishGridAnnotationLayer
+            :layout="layout"
+            :active-step="graphicProps.activeStep"
+            :step-progress="graphicProps.stepProgress"
+            :annotations="singleFishAnnotations"
+          />
+        </div>
       </template>
       <template #step="{ step }">
         <CopyBlock v-if="!minimalMode" :title="step.title">
@@ -60,8 +146,14 @@ const steps = [
 </template>
 
 <style scoped>
+.fish-grid-graphic-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 #fish-grid :deep(.sticky-graphic) {
-  background: #13265f;
+  background: #17203d;
 }
 
 #fish-grid :deep(.scroll-step) {

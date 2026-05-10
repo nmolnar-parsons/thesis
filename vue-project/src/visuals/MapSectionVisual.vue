@@ -4,6 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import tunaCatchData5degUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
 import tunaCatchData5degRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
+import { readColorDefaultBlue } from '../utils/readStoryColors.js'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
@@ -13,13 +14,12 @@ const REGION_YEAR_END = 2023
 const DEFAULT_PROJECTION = 'naturalEarth'
 /** 250 kg per bluefin on average; convert head-count to metric tonnes. */
 const COUNT_TO_TONNE = 250 / 1000
-/** Lowest tier on catch scale (tonnes = 0): base “ocean” fill. */
-const CATCH_SCALE_ZERO_COLOR = '#13265f'
 /** Upper bounds for each ramp step (Mapbox `step`: default color applies below first stop). */
 const CATCH_TONNE_STEP_STOPS = [100, 250, 500, 1000, 2000, 4000, 7000, 12000, 18000, 28000]
-/** Must align with stops: index 0 = below 100 t, then one color per interval. */
-const CATCH_COLOR_RAMP = [
-  CATCH_SCALE_ZERO_COLOR,
+/**
+ * Colors above `--color-default-blue` tier. Must align in length with CATCH_TONNE_STEP_STOPS.
+ */
+const CATCH_COLOR_RAMP_ABOVE_ZERO = [
   '#0b3c78',
   '#0f558f',
   '#1270a5',
@@ -32,10 +32,11 @@ const CATCH_COLOR_RAMP = [
   '#ffffff',
 ]
 
-function buildCatchTonnesStepExpression(valueExpr) {
-  const expr = ['step', valueExpr, CATCH_COLOR_RAMP[0]]
+/** `lowestTierHex` defaults from `--color-default-blue` (`readColorDefaultBlue`). */
+function buildCatchTonnesStepExpression(valueExpr, lowestTierHex = readColorDefaultBlue()) {
+  const expr = ['step', valueExpr, lowestTierHex]
   for (let i = 0; i < CATCH_TONNE_STEP_STOPS.length; i += 1) {
-    expr.push(CATCH_TONNE_STEP_STOPS[i], CATCH_COLOR_RAMP[i + 1])
+    expr.push(CATCH_TONNE_STEP_STOPS[i], CATCH_COLOR_RAMP_ABOVE_ZERO[i])
   }
   return expr
 }
@@ -168,7 +169,11 @@ const countNumberColor = computed(() => {
   return colorByIntensity(t)
 })
 
-const mapLegendGradient = `linear-gradient(to right, ${CATCH_COLOR_RAMP.join(', ')})`
+const mapLegendGradient = computed(() => {
+  const low = readColorDefaultBlue()
+  const stops = [low, ...CATCH_COLOR_RAMP_ABOVE_ZERO].join(', ')
+  return `linear-gradient(to right, ${stops})`
+})
 
 const narrativeCopy = computed(() => {
   if (props.activeStep >= STEP_FULLVIEW_LINGER_START && props.activeStep <= STEP_FULLVIEW_LINGER_END) {
@@ -387,7 +392,7 @@ onMounted(() => {
       },
       'source-layer': 'country_boundaries',
       'paint': {
-          'fill-color': '#13265f',
+          'fill-color': readColorDefaultBlue(),
           'fill-opacity': 1
       }
     })
@@ -729,8 +734,8 @@ onUnmounted(() => {
 
 .mediterranean-basin-shape path {
   fill: none;
-  stroke: rgb(255, 255, 255);
-  stroke-width: 3.5;
+  stroke: var(--story-annotation-map-stroke);
+  stroke-width: var(--story-annotation-map-stroke-width);
 }
 
 @media (max-width: 520px) {

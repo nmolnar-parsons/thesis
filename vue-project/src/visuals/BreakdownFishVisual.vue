@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computeFishBreakdownLayout, parse2023Counts } from '../composables/useFishBreakdownLayout.js'
+import { readColorDefaultBlue } from '../utils/readStoryColors.js'
 import csvRaw from '../data/toyosu_tuna_2023.csv?raw'
 import pacificFishUrl from './tuna-images/pacific-bluefin.png'
 
@@ -44,77 +46,17 @@ function easedTransitionProgress(t) {
   return easeInOutCubic((t - start) / (end - start))
 }
 
-function parse2023Counts(csvText) {
-  const lines = csvText.trim().split(/\r?\n/)
-  let yearFishCount = 0
-  const weeks = new Set()
+/** Step 0 only: fade-in starts at this fraction of scroll progress through the step (scrollama 0–1). */
+const FIRST_FISH_FADE_START = 0.8
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line) continue
-    const cols = line.split(',')
-    if (cols.length < 10) continue
-    const year = Number(cols[0])
-    if (year !== 2023) continue
-    const approxFish = Number(cols[8])
-    const weekNumber = Number(cols[9])
-    if (Number.isFinite(approxFish)) yearFishCount += approxFish
-    if (Number.isFinite(weekNumber)) weeks.add(weekNumber)
-  }
-
-  const weekCount = Math.max(1, weeks.size)
-  const weekFishCount = Math.ceil(yearFishCount / weekCount)
-  return { weekFishCount, yearFishCount }
+function firstFishEnterAlpha(rawStepProgress, reducedMotion) {
+  if (reducedMotion) return 1
+  const p = clamp01(rawStepProgress)
+  if (p <= FIRST_FISH_FADE_START) return 0
+  return clamp01((p - FIRST_FISH_FADE_START) / (1 - FIRST_FISH_FADE_START))
 }
 
 const fishTotals = computed(() => parse2023Counts(csvRaw))
-
-function getGridLayout(count, boxWidth, boxHeight, left, top, baseFishWidth, baseFishHeight, baseGap) {
-  const safeCount = Math.max(1, count)
-  const usableW = Math.max(80, boxWidth)
-  const usableH = Math.max(80, boxHeight)
-
-  const initialCols = Math.max(1, Math.ceil(Math.sqrt((safeCount * usableW) / usableH)))
-  const maxCols = Math.min(safeCount, Math.max(initialCols * 2, initialCols + 6))
-  const minCols = Math.max(1, Math.floor(initialCols / 2))
-
-  let best = null
-  for (let cols = minCols; cols <= maxCols; cols++) {
-    const rows = Math.ceil(safeCount / cols)
-    const contentW = cols * baseFishWidth + Math.max(0, cols - 1) * baseGap
-    const contentH = rows * baseFishHeight + Math.max(0, rows - 1) * baseGap
-    const fitScale = Math.min(usableW / contentW, usableH / contentH)
-    if (!Number.isFinite(fitScale) || fitScale <= 0) continue
-    if (!best || fitScale > best.fitScale) {
-      best = { cols, rows, fitScale }
-    }
-  }
-
-  if (!best) {
-    best = { cols: 1, rows: safeCount, fitScale: 1 }
-  }
-
-  const fishW = baseFishWidth * best.fitScale
-  const fishH = baseFishHeight * best.fitScale
-  const gap = baseGap * best.fitScale
-
-  const positions = []
-  for (let i = 0; i < safeCount; i++) {
-    const row = Math.floor(i / best.cols)
-    const col = i % best.cols
-    const x = left + col * (fishW + gap)
-    const y = top + row * (fishH + gap)
-    positions.push({ x, y, w: fishW, h: fishH })
-  }
-
-  return {
-    left,
-    top,
-    width: best.cols * fishW + Math.max(0, best.cols - 1) * gap,
-    height: best.rows * fishH + Math.max(0, best.rows - 1) * gap,
-    positions,
-  }
-}
 
 function drawImageFish(rect, alpha = 1) {
   if (!ctx || !fishImage) return
@@ -219,56 +161,19 @@ function draw() {
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-  ctx.fillStyle = '#041b46'
+  ctx.fillStyle = readColorDefaultBlue()
   ctx.fillRect(0, 0, width, height)
 
   const aspectRatio = fishAspect.value
-  const edgePad = Math.max(36, width * 0.08)
-  const bottomPad = Math.max(36, height * 0.08)
-  const titlePad = Math.max(76, height * 0.16)
-  const contentTop = titlePad
-  const contentHeight = Math.max(60, height - contentTop - bottomPad)
-  const contentWidth = Math.max(60, width - 2 * edgePad)
+  const {
+    singleCenterRect,
+    weekLayout,
+    yearLayout,
+    weekTopLeft,
+    yearTopLeft,
+  } = computeFishBreakdownLayout(width, height, aspectRatio, fishTotals.value)
 
-  const singleW = Math.min(contentWidth * 0.62, contentHeight * 0.8 * aspectRatio)
-  const singleH = singleW / aspectRatio
-
-  const singleCenterRect = {
-    x: (width - singleW) / 2,
-    y: contentTop + (contentHeight - singleH) / 2,
-    w: singleW,
-    h: singleH,
-  }
-
-  const gridLeft = edgePad
-  const gridTop = contentTop
-  const baseGap = Math.max(2, singleH * 0.04)
-
-  const weekLayout = getGridLayout(
-    fishTotals.value.weekFishCount,
-    contentWidth,
-    contentHeight,
-    gridLeft,
-    gridTop,
-    singleW,
-    singleH,
-    baseGap,
-  )
-  const yearLayout = getGridLayout(
-    fishTotals.value.yearFishCount,
-    contentWidth,
-    contentHeight,
-    gridLeft,
-    gridTop,
-    singleW,
-    singleH,
-    baseGap,
-  )
-
-  const weekTopLeft = weekLayout.positions[0] || { x: gridLeft, y: gridTop, w: singleW, h: singleH }
-  const yearTopLeft = yearLayout.positions[0] || weekTopLeft
-
-  const baseStep = Math.max(0, Math.min(4, props.activeStep))
+  const baseStep = Math.max(0, Math.min(9, props.activeStep))
   const reduced = prefersReducedMotion.value
   const rawProgress = clamp01(props.stepProgress)
   const progress = reduced
@@ -278,11 +183,17 @@ function draw() {
       : rawProgress
 
   if (baseStep === 0) {
+    const enterAlpha = firstFishEnterAlpha(rawProgress, reduced)
+    drawImageFish(singleCenterRect, enterAlpha)
+    return
+  }
+
+  if (baseStep >= 1 && baseStep <= 3) {
     drawImageFish(singleCenterRect, 1)
     return
   }
 
-  if (baseStep === 1) {
+  if (baseStep === 4) {
     const t = easedTransitionProgress(progress)
     const startMatchScale = singleCenterRect.h / Math.max(1, weekTopLeft.h)
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
@@ -300,12 +211,12 @@ function draw() {
     return
   }
 
-  if (baseStep === 2) {
+  if (baseStep === 5 || baseStep === 6) {
     drawImageGrid(weekLayout, 1)
     return
   }
 
-  if (baseStep === 3) {
+  if (baseStep === 7) {
     const t = easedTransitionProgress(progress)
     const startMatchScale = Math.max(1, weekTopLeft.h / Math.max(1, yearTopLeft.h))
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
@@ -400,7 +311,7 @@ watch(
 
 <template>
   <div class="breakdown-fish-visual">
-    <h2 class="visual-title visual-title--on-dark">The King of Sushi</h2>
+
     <canvas ref="canvasRef" aria-hidden="true" />
   </div>
 </template>

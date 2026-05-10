@@ -6,6 +6,7 @@ import { select } from 'd3-selection'
 import { transition } from 'd3-transition'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_grouped.csv?raw'
+import { readColorDefaultBlue } from '../utils/readStoryColors.js'
 
 const compactNumber = d3Format('~s')
 function formatTickShort(d) {
@@ -32,8 +33,23 @@ const Y_AXIS_MAX = 120_000
 
 /** Toggle single-line authoring inputs merged into SVG annotation labels while tuning copy. */
 const SHOW_ANNOTATION_TEXT_INPUT = false
-const ANNOTATION_STROKE = '#7f1d1d'
-const ANNOTATION_STROKE_WIDTH = 6
+
+const DEFAULT_STACKED_BARS_ANNO_STROKE = '#7f1d1d'
+const DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH = 6
+
+/** From story.css (--story-annotation-stacked-bars-*). Used for SVG attrs D3 writes each draw. */
+function readStackedBarsAnnotationPaint() {
+  if (typeof document === 'undefined') {
+    return { stroke: DEFAULT_STACKED_BARS_ANNO_STROKE, strokeWidth: DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH }
+  }
+  const cs = getComputedStyle(document.documentElement)
+  const stroke =
+    cs.getPropertyValue('--story-annotation-stacked-bars-stroke').trim() || DEFAULT_STACKED_BARS_ANNO_STROKE
+  const wRaw = cs.getPropertyValue('--story-annotation-stacked-bars-stroke-width').trim() || ''
+  let strokeWidth = parseFloat(wRaw)
+  if (!Number.isFinite(strokeWidth)) strokeWidth = DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH
+  return { stroke, strokeWidth }
+}
 /** Horizontal gap (px) between annotation line and label block (local x=0 is bar/line edge). */
 const ANNO_LABEL_LINE_GAP_PX = 6
 const ANNO_LABEL_BG_RX = 5
@@ -47,8 +63,9 @@ const annotationLabelOverrides = reactive({})
 
 const SPECIES_META = [{ code: BLUEFIN_CODE, label: 'Bluefin Tuna' }]
 
-const SPECIES_COLORS = {
-  [BLUEFIN_CODE]: '#17203D',
+function speciesBarFill(speciesCode) {
+  if (speciesCode === BLUEFIN_CODE) return readColorDefaultBlue()
+  return '#94a3b8'
 }
 
 const STAGES = [
@@ -296,7 +313,7 @@ function parseSvgTranslate(transform) {
 }
 
 /** Pill extends behind the anno line (`bgRightEdge`=0 local); glyphs stay inset via `text x = -gap` on the `<text>`. */
-function layoutAnnotationBgRect(labelSelection, padX, padY, bgRightEdgeLocal, cornerRx) {
+function layoutAnnotationBgRect(labelSelection, padX, padY, bgRightEdgeLocal, cornerRx, annoStroke) {
   labelSelection.each(function () {
     const gSel = select(this)
     const textNode = gSel.select('text.annotation-flag-label').node()
@@ -306,9 +323,9 @@ function layoutAnnotationBgRect(labelSelection, padX, padY, bgRightEdgeLocal, co
       const bbox = textNode.getBBox()
       const rectLeft = bbox.x - padX
       rectSel
-        .attr('fill', ANNOTATION_STROKE)
+        .attr('fill', annoStroke)
         .attr('opacity', 1)
-        .attr('stroke', ANNOTATION_STROKE)
+        .attr('stroke', annoStroke)
         .attr('stroke-width', 0)
         .attr('x', rectLeft)
         .attr('y', bbox.y - padY)
@@ -531,7 +548,7 @@ function drawChart() {
           .attr('width', xScale.bandwidth())
           .attr('y', baselineY)
           .attr('height', 0)
-          .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
+          .attr('fill', (d) => speciesBarFill(d.species))
           .attr('opacity', 0),
       (update) => update.attr('class', 'bar-segment'),
       (exit) =>
@@ -551,7 +568,7 @@ function drawChart() {
     .attr('width', xScale.bandwidth())
     .attr('y', (d) => yScale(d.y1))
     .attr('height', (d) => Math.max(0, yScale(d.y0) - yScale(d.y1)))
-    .attr('fill', (d) => SPECIES_COLORS[d.species] || '#94a3b8')
+    .attr('fill', (d) => speciesBarFill(d.species))
     .attr('opacity', 0.92)
 
   gHoverTargets
@@ -613,6 +630,7 @@ function drawChart() {
 
   const labelPadX = 6
   const labelPadY = 5
+  const stackedAnnoPaint = readStackedBarsAnnotationPaint()
 
   gAnnotations
     .selectAll('text.annotation-flag-label')
@@ -647,7 +665,7 @@ function drawChart() {
     .attr('y', 0)
     .text((d) => String(d.label ?? '').trim())
 
-  layoutAnnotationBgRect(labelGs, labelPadX, labelPadY, 0, ANNO_LABEL_BG_RX)
+  layoutAnnotationBgRect(labelGs, labelPadX, labelPadY, 0, ANNO_LABEL_BG_RX, stackedAnnoPaint.stroke)
 
   const lineSel = gAnnotations
     .selectAll('line.annotation-flag-line')
@@ -690,8 +708,8 @@ function drawChart() {
     .attr('x2', (d) => yearRightX(xScale, d.year))
     .attr('y1', (d) => yScale(d.y1))
     .attr('y2', (d) => yScale(d.y2))
-    .attr('stroke', ANNOTATION_STROKE)
-    .attr('stroke-width', ANNOTATION_STROKE_WIDTH)
+    .attr('stroke', stackedAnnoPaint.stroke)
+    .attr('stroke-width', stackedAnnoPaint.strokeWidth)
     .attr('stroke-linecap', 'round')
     .attr('opacity', 0.9)
 
@@ -780,7 +798,7 @@ onUnmounted(() => {
         <aside class="legend" aria-label="Species in chart">
           <TransitionGroup name="legend" tag="ul" class="legend-list">
             <li v-for="s in legendSpecies" :key="s.code" class="legend-item">
-              <span class="swatch" :style="{ '--swatch-color': SPECIES_COLORS[s.code] }" />
+              <span class="swatch" :style="{ '--swatch-color': speciesBarFill(s.code) }" />
               <span class="legend-label">{{ s.label }}</span>
             </li>
           </TransitionGroup>
@@ -951,7 +969,7 @@ onUnmounted(() => {
   font-size: var(--font-size-axis-tick);
   font-family: var(--font-family-axis-tick);
   font-weight: var(--font-weight-axis-tick);
-  fill: #ffffff;
+  fill: var(--story-annotation-stacked-bars-label-fill);
 }
 
 .stacked-wrap :deep(.axis path),
