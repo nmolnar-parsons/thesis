@@ -4,13 +4,11 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import tunaCatchData5degUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
 import tunaCatchData5degRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
-import { readColorDefaultBlue } from '../utils/readStoryColors.js'
+import iccatFishFarmsCentroidsUrl from '../data/iccat_fish_farms_centroids.geojson?url'
+import { readColorDefaultBlue, readColorTunaFarmed } from '../utils/readStoryColors.js'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
-/** Mediterranean zoom: replay years before advancing the story. */
-const REGION_YEAR_START = 2007
-const REGION_YEAR_END = 2023
 const DEFAULT_PROJECTION = 'naturalEarth'
 /** 250 kg per bluefin on average; convert head-count to metric tonnes. */
 const COUNT_TO_TONNE = 250 / 1000
@@ -44,20 +42,79 @@ const STEP_YEAR_FULLVIEW_END = 4
 /** Full global view, year already at 2023; extra scroll beats before regional zoom. */
 const STEP_FULLVIEW_LINGER_START = 5
 const STEP_FULLVIEW_LINGER_END = 8
-/** Mediterranean zoom: year scrub, then basin annotation + linger at 2023. */
-const STEP_MEDITERRANEAN = 9
-/** Last step where the regional year advances (then 2023 through callout + linger). */
-const STEP_MEDITERRANEAN_YEAR_END = 11
-/** First Mediterranean beat after year scrub, fixed at 2023. */
-const STEP_MEDITERRANEAN_2023_CALLOUT = STEP_MEDITERRANEAN_YEAR_END + 1
-/** Extra pacing on Med at 2023 while the ellipse remains (mirrors global linger). */
-const STEP_MEDITERRANEAN_LINGER_START = 13
-const STEP_MEDITERRANEAN_LINGER_END = 16
-/** Last Med-framed scroll step before easing back to global. */
-const STEP_MEDITERRANEAN_END = STEP_MEDITERRANEAN_LINGER_END
-/** Global return + trailing scroll padding (indices 17–19 → m18–m20). */
-const STEP_RETURN_FULL = 17
+/** Mediterranean camera: zoom from global with year frozen at 2023 (see Map.vue). */
+const STEP_MEDITERRANEAN_START = 9
+/** First step ICCAT farms may fade in (after med zoom settles). */
+const STEP_MEDITERRANEAN_FARMS_START = 10
+/** Single linger beat after farms appear while still zoomed into the Med. */
+const STEP_MEDITERRANEAN_FARM_LINGER_END = 11
+/** Last Mediterranean-framed step before easing back to global. */
+const STEP_MEDITERRANEAN_END = STEP_MEDITERRANEAN_FARM_LINGER_END
+/** Zoom out to global + trailing scroll steps (three beats; see Map.vue). */
+const STEP_RETURN_FULL = 12
 const STEP_ANIMATION_DURATION_MS = 2600
+/** ICCAT farm points: STEP_MEDITERRANEAN_FARMS_START .. FARM_LINGER_END (Map.vue); zoom-gated. */
+const ICCAT_FARMS_SOURCE_ID = 'iccat-fish-farms'
+const ICCAT_FARMS_LAYER_ID = 'iccat-fish-farms-circles'
+const FARM_CIRCLES_MIN_ZOOM = 4.0
+const FARM_CIRCLES_FILL_OPACITY_VISIBLE = 0.95
+const FARM_CIRCLES_STROKE_OPACITY_VISIBLE = 1
+/** Opacity tween when ICCAT farms should show or hide */
+const FARM_CIRCLES_FADE_MS = 520
+
+let farmCirclesFadeRaf = null
+/** Last `show` target from sync; avoids restarting fade while unchanged */
+let farmCirclesFadeTargetShow = null
+
+function easeOutCubic(t) {
+  return 1 - (1 - t) ** 3
+}
+
+function cancelFarmCirclesFade() {
+  if (farmCirclesFadeRaf != null) {
+    cancelAnimationFrame(farmCirclesFadeRaf)
+    farmCirclesFadeRaf = null
+  }
+}
+
+function applyFarmCirclesOpacity(fillOpacity, strokeOpacity) {
+  if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) return
+  map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-opacity', fillOpacity)
+  map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-stroke-opacity', strokeOpacity)
+}
+
+function fadeFarmCirclesTo(show) {
+  if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) return
+  cancelFarmCirclesFade()
+  const lid = ICCAT_FARMS_LAYER_ID
+  const endFill = show ? FARM_CIRCLES_FILL_OPACITY_VISIBLE : 0
+  const endStroke = show ? FARM_CIRCLES_STROKE_OPACITY_VISIBLE : 0
+  let startFill = map.getPaintProperty(lid, 'circle-opacity')
+  if (typeof startFill !== 'number' || Number.isNaN(startFill)) startFill = 0
+  let startStroke = map.getPaintProperty(lid, 'circle-stroke-opacity')
+  if (typeof startStroke !== 'number' || Number.isNaN(startStroke)) startStroke = 0
+
+  const t0 = performance.now()
+  function frame(now) {
+    if (!map || !mapReady.value || !map.getLayer(lid)) {
+      farmCirclesFadeRaf = null
+      return
+    }
+    const t = Math.min(1, (now - t0) / FARM_CIRCLES_FADE_MS)
+    const u = easeOutCubic(t)
+    applyFarmCirclesOpacity(
+      startFill + (endFill - startFill) * u,
+      startStroke + (endStroke - startStroke) * u,
+    )
+    if (t < 1) {
+      farmCirclesFadeRaf = requestAnimationFrame(frame)
+    } else {
+      farmCirclesFadeRaf = null
+      applyFarmCirclesOpacity(endFill, endStroke)
+    }
+  }
+  farmCirclesFadeRaf = requestAnimationFrame(frame)
+}
 
 function stepAnimationEasing(t) {
   return t < 0.5
@@ -69,14 +126,14 @@ const props = defineProps({
   activeStep: { type: Number, default: 0 },
   /** Scrollama progress through the current step, roughly 0–1. */
   stepProgress: { type: Number, default: 0 },
-  stepCount: { type: Number, default: 20 },
+  stepCount: { type: Number, default: 15 },
   minimalMode: { type: Boolean, default: false },
 })
 
-const MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION =
+const MEDITERRANEAN_ZOOM_FILLER =
   'Med Filler'
-const MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION =
-  'Med Filler Anno'
+const MEDITERRANEAN_FARMS_FILLER =
+  'Med Filler Farms'
 const LINGER_2023_FILLER = 'filler for 2023 linger'
 const DEFAULT_FILLER = 'default filler'
 
@@ -94,13 +151,7 @@ function clamp01(v) {
 const currentYear = computed(() => {
   const step = props.activeStep
   const prog = props.stepProgress
-  if (step >= STEP_MEDITERRANEAN && step <= STEP_MEDITERRANEAN_YEAR_END) {
-    const nSteps = STEP_MEDITERRANEAN_YEAR_END - STEP_MEDITERRANEAN + 1
-    const t = clamp01((step - STEP_MEDITERRANEAN + prog) / nSteps)
-    const spanY = REGION_YEAR_END - REGION_YEAR_START
-    return Math.min(REGION_YEAR_END, Math.max(REGION_YEAR_START, Math.round(REGION_YEAR_START + t * spanY)))
-  }
-  if (step >= STEP_RETURN_FULL || step > STEP_YEAR_FULLVIEW_END) {
+  if (step > STEP_YEAR_FULLVIEW_END) {
     return YEAR_END
   }
   const spanSteps = Math.max(1, STEP_YEAR_FULLVIEW_END + 1)
@@ -179,17 +230,16 @@ const narrativeCopy = computed(() => {
   if (props.activeStep >= STEP_FULLVIEW_LINGER_START && props.activeStep <= STEP_FULLVIEW_LINGER_END) {
     return LINGER_2023_FILLER
   }
-  if (props.activeStep >= STEP_MEDITERRANEAN && props.activeStep <= STEP_MEDITERRANEAN_YEAR_END) {
-    return MEDITERRANEAN_NARRATIVE_BEFORE_ANNOTATION
-  }
-  if (props.activeStep === STEP_MEDITERRANEAN_2023_CALLOUT) {
-    return MEDITERRANEAN_NARRATIVE_WITH_ANNOTATION
+  if (props.activeStep === STEP_MEDITERRANEAN_START) {
+    return MEDITERRANEAN_ZOOM_FILLER
   }
   if (
-    props.activeStep >= STEP_MEDITERRANEAN_LINGER_START
-    && props.activeStep <= STEP_MEDITERRANEAN_LINGER_END
+    props.activeStep >= STEP_MEDITERRANEAN_FARMS_START
+    && props.activeStep <= STEP_MEDITERRANEAN_FARM_LINGER_END
   ) {
-    return LINGER_2023_FILLER
+    return props.activeStep === STEP_MEDITERRANEAN_FARM_LINGER_END
+      ? LINGER_2023_FILLER
+      : MEDITERRANEAN_FARMS_FILLER
   }
   if (props.activeStep >= STEP_RETURN_FULL) {
     return 'Regional hotspots are intensifying while the full ocean picture continues to change.'
@@ -302,9 +352,35 @@ function applyTunaCatchFillSeamMitigation() {
   map.setPaintProperty('tuna-catch-fill', 'fill-antialias', false)
 }
 
+function updateFarmCirclesPaint() {
+  if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) return
+  map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-color', readColorTunaFarmed())
+  map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-stroke-color', 'rgba(255, 255, 255, 0.92)')
+}
+
+function syncFarmCirclesVisibility() {
+  if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) return
+  updateFarmCirclesPaint()
+  const step = props.activeStep
+  const inMedFarmBeat =
+    step >= STEP_MEDITERRANEAN_FARMS_START
+    && step <= STEP_MEDITERRANEAN_FARM_LINGER_END
+    && currentYear.value === YEAR_END
+  const show = inMedFarmBeat && map.getZoom() >= FARM_CIRCLES_MIN_ZOOM
+  if (show === farmCirclesFadeTargetShow) return
+  farmCirclesFadeTargetShow = show
+  fadeFarmCirclesTo(show)
+}
+
+function attachFarmCirclesViewportListeners() {
+  if (!map) return
+  map.on('zoom', syncFarmCirclesVisibility)
+  map.on('moveend', syncFarmCirclesVisibility)
+}
+
 function cameraForStep(stepIndex) {
   const cameraPadding = { top: 24, right: 24, bottom: 24, left: 24 }
-  if (stepIndex >= STEP_MEDITERRANEAN && stepIndex <= STEP_MEDITERRANEAN_END) {
+  if (stepIndex >= STEP_MEDITERRANEAN_START && stepIndex <= STEP_MEDITERRANEAN_END) {
     return {
       key: 'mediterranean',
       center: [14, 38],
@@ -397,6 +473,27 @@ onMounted(() => {
       }
     })
 
+    map.addSource(ICCAT_FARMS_SOURCE_ID, {
+      type: 'geojson',
+      data: iccatFishFarmsCentroidsUrl,
+    })
+    map.addLayer({
+      id: ICCAT_FARMS_LAYER_ID,
+      type: 'circle',
+      source: ICCAT_FARMS_SOURCE_ID,
+      layout: {
+        visibility: 'visible',
+      },
+      paint: {
+        'circle-radius': 7,
+        'circle-color': readColorTunaFarmed(),
+        'circle-opacity': 0,
+        'circle-stroke-width': 0.5,
+        'circle-stroke-color': 'rgba(255, 255, 255, 0.92)',
+        'circle-stroke-opacity': 0,
+      },
+    })
+
     mapReady.value = true
     hideMapLabels()
     showOceanLabelsOnly()
@@ -404,13 +501,16 @@ onMounted(() => {
     neutralizeWaterColor()
     applyTunaCatchFillSeamMitigation()
     updateCatchLayer()
+    attachFarmCirclesViewportListeners()
     updateCameraForStep(props.activeStep, true)
+    syncFarmCirclesVisibility()
   })
 
   resizeObserver = new ResizeObserver(() => {
     if (!map || !mapReady.value) return
     map.resize()
     updateCameraForStep(props.activeStep, true)
+    syncFarmCirclesVisibility()
   })
   if (mapRef.value) resizeObserver.observe(mapRef.value)
 })
@@ -419,14 +519,18 @@ watch(
   () => props.activeStep,
   (step) => {
     updateCameraForStep(step)
+    syncFarmCirclesVisibility()
   },
 )
 
 watch(currentYear, () => {
   updateCatchLayer()
+  syncFarmCirclesVisibility()
 })
 
 onUnmounted(() => {
+  cancelFarmCirclesFade()
+  farmCirclesFadeTargetShow = null
   resizeObserver?.disconnect()
   resizeObserver = null
   if (map) map.remove()
@@ -440,16 +544,12 @@ onUnmounted(() => {
     <div ref="mapRef" class="map-host" />
 
     <div class="hud-row">
-      <div class="metrics-card">
+      <div class="metrics-card" :class="{ 'metrics-card--minimal': minimalMode }">
         <p class="year-text">{{ currentYear }}</p>
         <div v-if="!minimalMode" class="metrics-card-details">
           <p class="metric-line">
             <span class="metric-caption">Total fish caught:</span>
             <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
-          </p>
-          <p class="metric-line metric-line-temp">
-            <span class="metric-caption">Global ocean temperature:</span>
-            <span>—</span>
           </p>
           <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
         </div>
@@ -509,6 +609,10 @@ onUnmounted(() => {
   /* Align bottom chrome with year card left edge (.hud-row); bottom with legend */
   --map-hud-inset-left: 0.85rem;
   --map-bottom-chrome: 0.45rem;
+  /** Catch-intensity legend (bottom-right) + full metrics card — same width (~⅔ of former 440px) */
+  --map-hud-panel-width: min(300px, 72vw);
+  /** Same horizontal inset as `--map-hud-inset-left`; keeps `.hud-row` stretched between edges */
+  --map-hud-inset-right: 0.85rem;
   position: relative;
   width: 100%;
   height: 100%;
@@ -600,13 +704,16 @@ onUnmounted(() => {
   text-underline-offset: 2px;
 }
 
-/* Nudge up by 1px so year cap-height lines up with .map-title (card top border) */
+/* Nudge up by 1px so year cap-height lines up with .map-title (card top border)
+   Without left+right (or explicit width), absolute positioning shrink-wraps to content and
+   `width: %` on `.metrics-card` never establishes a fixed column — text drives the box width. */
 .hud-row {
   position: absolute;
   left: var(--map-hud-inset-left);
+  right: var(--map-hud-inset-right);
   top: calc(0.6rem - 1px);
   z-index: 7;
-  max-width: calc(100% - 1.7rem);
+  box-sizing: border-box;
 }
 
 .metrics-card {
@@ -617,14 +724,27 @@ onUnmounted(() => {
   border: 1px solid rgba(15, 23, 42, 0.2);
   background: rgba(255, 255, 255, 0.92);
   color: #000000;
+  display: block;
+  overflow-wrap: break-word;
+}
+
+.metrics-card:not(.metrics-card--minimal) {
+  width: var(--map-hud-panel-width);
+  max-width: 100%;
+}
+
+.metrics-card--minimal {
+  /* Hug the year line; horizontal padding on `.metrics-card` stays equal L/R (no fixed width clipping) */
   width: fit-content;
-  max-width: min(440px, 100%);
+  max-width: 100%;
+  padding-inline: 0.85rem;
 }
 
 .metrics-card-details {
   margin-top: var(--space-visual-title-gap);
   padding-top: var(--space-visual-title-gap);
   border-top: 1px solid rgba(15, 23, 42, 0.14);
+  min-width: 0;
 }
 
 .narrative-copy {
@@ -633,6 +753,8 @@ onUnmounted(() => {
   border-top: 1px solid rgba(15, 23, 42, 0.12);
   font-size: 0.92rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .map-hud-title {
@@ -650,7 +772,8 @@ onUnmounted(() => {
   right: var(--map-hud-inset-left);
   bottom: var(--map-bottom-chrome);
   z-index: 7;
-  width: min(300px, 72vw);
+  width: var(--map-hud-panel-width);
+  box-sizing: border-box;
   padding: var(--viz-legend-padding);
   border: var(--viz-legend-border);
   border-radius: 0;
@@ -684,6 +807,11 @@ onUnmounted(() => {
   line-height: var(--line-height-visual-title);
 }
 
+.metrics-card--minimal .year-text {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .metric-line {
   margin: 0.2rem 0;
   color: #000000;
@@ -698,10 +826,6 @@ onUnmounted(() => {
 
 .metric-value {
   font-weight: var(--font-weight-ui);
-}
-
-.metric-line-temp {
-  margin-top: 0.4rem;
 }
 
 .callout-layer {
@@ -759,6 +883,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 900px) {
+  .map-frame {
+    --map-hud-panel-width: min(240px, 76vw);
+  }
+
   .mediterranean-callout {
     left: 50%;
     top: 30%;
@@ -772,10 +900,6 @@ onUnmounted(() => {
 
   .hud-row {
     top: calc(0.4rem - 1px);
-  }
-
-  .map-legend {
-    width: min(240px, 76vw);
   }
 }
 

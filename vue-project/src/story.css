@@ -68,6 +68,8 @@
    * BreakdownFishVisual canvas backdrop.
    */
   --color-default-blue: #071458;
+  /** Streamgraph farmed ribbon + ICCAT farm map circles (TunaProductionStreamgraphVisual, MapSectionVisual). */
+  --color-tuna-farmed: #0a9542;
 
   --color-annotation-blue-background: #ffffff;
   --color-annotation-white-background: #c81414;
@@ -90,10 +92,14 @@
 
   /*
    * Stacked bars section chart ( TunaStackedBarsVisual SVG ): vertical leader stroke,
-   * label pill backing ( fill matches stroke ), label text fill.
+   * label pill backing ( --color-annotation-white-background on .annotation-flag-label-bg ),
+   * label text fill.
    */
   --story-annotation-stacked-bars-stroke: var(--color-annotation-white-background);
   --story-annotation-stacked-bars-stroke-width: 6;
+  /** Vertical annotation stem opacity (pill uses full opacity unless you tone it down separately). */
+  --story-annotation-stacked-bars-flag-line-opacity: 1;
+  --story-annotation-stacked-bars-label-font-size: 1.05rem;
   --story-annotation-stacked-bars-label-fill: #ffffff;
 
   /* Section shell (StorySection) */

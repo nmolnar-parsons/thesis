@@ -37,12 +37,23 @@ const SHOW_ANNOTATION_TEXT_INPUT = false
 const DEFAULT_STACKED_BARS_ANNO_STROKE = '#7f1d1d'
 const DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH = 6
 
-/** From story.css (--story-annotation-stacked-bars-*). Used for SVG attrs D3 writes each draw. */
-function readStackedBarsAnnotationPaint() {
+function annotationCssScope(rootEl) {
+  if (!rootEl) return typeof document !== 'undefined' ? document.documentElement : null
+  return rootEl.closest('.stacked-wrap') ?? rootEl ?? (typeof document !== 'undefined' ? document.documentElement : null)
+}
+
+/**
+ * Resolved paint from story.css vars. Prefer reading from `.stacked-wrap` so tokens match what the SVG
+ * subtree inherits (rather than `:root`-only quirks with var() chaining in JS).
+ */
+function readStackedBarsAnnotationPaint(rootEl) {
   if (typeof document === 'undefined') {
     return { stroke: DEFAULT_STACKED_BARS_ANNO_STROKE, strokeWidth: DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH }
   }
-  const cs = getComputedStyle(document.documentElement)
+  const scope = annotationCssScope(rootEl)
+  if (!scope)
+    return { stroke: DEFAULT_STACKED_BARS_ANNO_STROKE, strokeWidth: DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH }
+  const cs = getComputedStyle(scope)
   const stroke =
     cs.getPropertyValue('--story-annotation-stacked-bars-stroke').trim() || DEFAULT_STACKED_BARS_ANNO_STROKE
   const wRaw = cs.getPropertyValue('--story-annotation-stacked-bars-stroke-width').trim() || ''
@@ -50,9 +61,21 @@ function readStackedBarsAnnotationPaint() {
   if (!Number.isFinite(strokeWidth)) strokeWidth = DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH
   return { stroke, strokeWidth }
 }
+
+/** Same token chain as SVG fill `: var(--color-annotation-white-background)` — used for a 0-width stroke so edges match legacy rasterization. */
+function readAnnotationPillBackdropChromeStroke(rootEl) {
+  if (typeof document === 'undefined') return DEFAULT_STACKED_BARS_ANNO_STROKE
+  const scope = annotationCssScope(rootEl)
+  if (!scope) return DEFAULT_STACKED_BARS_ANNO_STROKE
+  const cs = getComputedStyle(scope)
+  return (
+    cs.getPropertyValue('--color-annotation-white-background').trim() ||
+    cs.getPropertyValue('--story-annotation-stacked-bars-stroke').trim() ||
+    DEFAULT_STACKED_BARS_ANNO_STROKE
+  )
+}
 /** Horizontal gap (px) between annotation line and label block (local x=0 is bar/line edge). */
 const ANNO_LABEL_LINE_GAP_PX = 6
-const ANNO_LABEL_BG_RX = 5
 
 function annotationLabelKey(stageIndex, annoIndex) {
   return `${stageIndex}-${annoIndex}`
@@ -297,12 +320,12 @@ function annotationLabelTopPx(annotation, yScale) {
   return Math.min(p1, p2)
 }
 
-/** Pivot for label wrap: anchored at trailing edge of the year's bar × top of annotation (+ optional dx/dy). */
+/** Pivot for label wrap: anchored at trailing edge of year's bar × top of vertical flag (pill rect y=0). */
 function annotationLabelGroupTranslate(d, xScale, yScale) {
   const rx = yearRightX(xScale, d.year)
   const topPx = annotationLabelTopPx(d, yScale)
   if (rx == null || topPx == null) return [0, 0]
-  return [rx + (d.labelDx ?? 0), topPx + 10 + (d.labelDy ?? 0)]
+  return [rx + (d.labelDx ?? 0), topPx + (d.labelDy ?? 0)]
 }
 
 function parseSvgTranslate(transform) {
@@ -312,8 +335,11 @@ function parseSvgTranslate(transform) {
   return [Number(m[1]), Number(m[2])]
 }
 
-/** Pill extends behind the anno line (`bgRightEdge`=0 local); glyphs stay inset via `text x = -gap` on the `<text>`. */
-function layoutAnnotationBgRect(labelSelection, padX, padY, bgRightEdgeLocal, cornerRx, annoStroke) {
+/**
+ * Pill in group coords with origin at trailing bar edge × line top (`rect.top = 0` matches flag stem).
+ * Text sits `padY` below pill top (`text-before-edge` baseline at that y).
+ */
+function layoutAnnotationBgRect(labelSelection, padX, padY, bgRightEdgeLocal, pillChromeStroke) {
   labelSelection.each(function () {
     const gSel = select(this)
     const textNode = gSel.select('text.annotation-flag-label').node()
@@ -321,18 +347,17 @@ function layoutAnnotationBgRect(labelSelection, padX, padY, bgRightEdgeLocal, co
     if (!textNode) return
     try {
       const bbox = textNode.getBBox()
+      const inkBottom = bbox.y + bbox.height
       const rectLeft = bbox.x - padX
       rectSel
-        .attr('fill', annoStroke)
-        .attr('opacity', 1)
-        .attr('stroke', annoStroke)
+        .attr('stroke', pillChromeStroke)
         .attr('stroke-width', 0)
+        .attr('rx', 0)
+        .attr('ry', 0)
         .attr('x', rectLeft)
-        .attr('y', bbox.y - padY)
-        .attr('rx', cornerRx)
-        .attr('ry', cornerRx)
+        .attr('y', 0)
         .attr('width', Math.max(0, bgRightEdgeLocal - rectLeft))
-        .attr('height', Math.max(0, bbox.height + padY * 2))
+        .attr('height', Math.max(0, inkBottom + padY))
     } catch {
       rectSel.attr('width', 0).attr('height', 0)
     }
@@ -630,7 +655,8 @@ function drawChart() {
 
   const labelPadX = 6
   const labelPadY = 5
-  const stackedAnnoPaint = readStackedBarsAnnotationPaint()
+  const stackedAnnoPaint = readStackedBarsAnnotationPaint(el)
+  const annoPillChromeStroke = readAnnotationPillBackdropChromeStroke(el)
 
   gAnnotations
     .selectAll('text.annotation-flag-label')
@@ -660,12 +686,12 @@ function drawChart() {
 
   labelGs.select('text.annotation-flag-label')
     .attr('text-anchor', 'end')
-    .attr('dominant-baseline', 'hanging')
+    .attr('dominant-baseline', 'text-before-edge')
     .attr('x', -ANNO_LABEL_LINE_GAP_PX)
-    .attr('y', 0)
+    .attr('y', labelPadY)
     .text((d) => String(d.label ?? '').trim())
 
-  layoutAnnotationBgRect(labelGs, labelPadX, labelPadY, 0, ANNO_LABEL_BG_RX, stackedAnnoPaint.stroke)
+  layoutAnnotationBgRect(labelGs, labelPadX, labelPadY, 0, annoPillChromeStroke)
 
   const lineSel = gAnnotations
     .selectAll('line.annotation-flag-line')
@@ -710,8 +736,6 @@ function drawChart() {
     .attr('y2', (d) => yScale(d.y2))
     .attr('stroke', stackedAnnoPaint.stroke)
     .attr('stroke-width', stackedAnnoPaint.strokeWidth)
-    .attr('stroke-linecap', 'round')
-    .attr('opacity', 0.9)
 
   prevRevealedYears.value = stageIdx >= 0 ? [...stageYears] : []
   prevActiveStep.value = props.activeStep
@@ -964,9 +988,18 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+.stacked-wrap :deep(.annotation-flag-label-bg) {
+  fill: var(--color-annotation-white-background);
+}
+
+.stacked-wrap :deep(.annotation-flag-line) {
+  opacity: var(--story-annotation-stacked-bars-flag-line-opacity);
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
 .stacked-wrap :deep(.annotation-flag-label) {
-  /* Match chart axis tick labels (see .axis text) */
-  font-size: var(--font-size-axis-tick);
+  font-size: var(--story-annotation-stacked-bars-label-font-size);
   font-family: var(--font-family-axis-tick);
   font-weight: var(--font-weight-axis-tick);
   fill: var(--story-annotation-stacked-bars-label-fill);

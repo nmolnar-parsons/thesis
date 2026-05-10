@@ -21,12 +21,13 @@ const SINGLE_CENTER = SINGLE_SVG_SIZE / 2
 /** Radial bump from arc, then one straight segment to label (single bend). Donut-centered coords. */
 const CALLOUT_RADIAL_BUMP = 30
 /** How far out labels sit from donut edge along slice direction */
-const CALLOUT_LABEL_RADIUS = SINGLE_OUTER_RADIUS + 64
+const CALLOUT_LABEL_RADIUS = SINGLE_OUTER_RADIUS + 50
 const CALLOUT_DOT_R = 5.5
-const CALLOUT_TEXT_GAP = 18
-const CALLOUT_VERTICAL_GAP = 36
-const MORPH_DURATION_MS = 700
+const CALLOUT_TEXT_GAP = 14
+const CALLOUT_VERTICAL_GAP = 28
 const CALLOUT_REVEAL_DURATION_MS = 440
+/** Donut-centered Y for top callout row; pins layout across district switches */
+const TOP_CALLOUT_ANCHOR_Y = -(SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP + 42)
 
 const NYC_DISTRICT_KEY = 'New York, NY'
 
@@ -144,18 +145,10 @@ watch(selectedDistrictChart, () => {
   tooltip.value.visible = false
 })
 
-const morphArcs = ref(null)
-const isMorphing = ref(false)
 const calloutReveal = ref(1)
-let morphRafId = 0
+/** True while waiting for donut fade-in to finish before running label reveal */
+const pendingDonutCalloutReveal = ref(false)
 let calloutRafId = 0
-
-function cancelMorphAnimation() {
-  if (morphRafId) {
-    cancelAnimationFrame(morphRafId)
-    morphRafId = 0
-  }
-}
 
 function cancelCalloutReveal() {
   if (calloutRafId) {
@@ -184,102 +177,32 @@ function startCalloutReveal() {
   calloutRafId = requestAnimationFrame(tick)
 }
 
-function buildMorphArcPayload(prev, next, t) {
-  const prevBy = new Map(
-    prev.arcs.map((a) => [a.data.country, { startAngle: a.startAngle, endAngle: a.endAngle, data: a.data }]),
-  )
-  const nextBy = new Map(
-    next.arcs.map((a) => [a.data.country, { startAngle: a.startAngle, endAngle: a.endAngle, data: a.data }]),
-  )
-  const orderedCountries = []
-  const seen = new Set()
-
-  for (const a of next.arcs) {
-    if (!seen.has(a.data.country)) {
-      seen.add(a.data.country)
-      orderedCountries.push(a.data.country)
-    }
-  }
-  for (const a of prev.arcs) {
-    if (!seen.has(a.data.country)) {
-      seen.add(a.data.country)
-      orderedCountries.push(a.data.country)
-    }
-  }
-
-  const out = []
-  for (const country of orderedCountries) {
-    const pa = prevBy.get(country)
-    const na = nextBy.get(country)
-    const data = na?.data ?? pa?.data
-    if (!data) continue
-
-    let s0 = pa?.startAngle
-    let e0 = pa?.endAngle
-    let s1 = na?.startAngle
-    let e1 = na?.endAngle
-
-    if (na && !pa) {
-      const mid = (na.startAngle + na.endAngle) / 2
-      s0 = mid
-      e0 = mid
-    }
-    if (pa && !na) {
-      const mid = (pa.startAngle + pa.endAngle) / 2
-      s1 = mid
-      e1 = mid
-    }
-
-    const startAngle = s0 + (s1 - s0) * t
-    const endAngle = e0 + (e1 - e0) * t
-    if (endAngle - startAngle < 1e-7) continue
-    out.push({ data, value: data.tonnes, startAngle, endAngle, padAngle: 0, index: 0 })
-  }
-  out.sort((a, b) => a.startAngle - b.startAngle)
-  return out
-}
-
 watch(
   selectedDistrictChart,
   (next, prev) => {
-    cancelMorphAnimation()
     cancelCalloutReveal()
-    morphArcs.value = null
-    isMorphing.value = false
     if (!next) {
       calloutReveal.value = 0
+      pendingDonutCalloutReveal.value = false
       return
     }
     if (!prev || next.district === prev.district) {
       calloutReveal.value = 1
+      pendingDonutCalloutReveal.value = false
       return
     }
-
-    const t0 = performance.now()
-    isMorphing.value = true
     calloutReveal.value = 0
-    morphArcs.value = buildMorphArcPayload(prev, next, 0)
-
-    function tick(now) {
-      const u = Math.min(1, (now - t0) / MORPH_DURATION_MS)
-      const te = easeCubicInOut(u)
-      morphArcs.value = buildMorphArcPayload(prev, next, te)
-      if (u >= 1) {
-        morphArcs.value = null
-        isMorphing.value = false
-        startCalloutReveal()
-        morphRafId = 0
-        return
-      }
-      morphRafId = requestAnimationFrame(tick)
-    }
-
-    morphRafId = requestAnimationFrame(tick)
+    pendingDonutCalloutReveal.value = true
   },
 )
 
+function onDonutArcsAfterEnter() {
+  if (!pendingDonutCalloutReveal.value) return
+  pendingDonutCalloutReveal.value = false
+  startCalloutReveal()
+}
+
 onBeforeUnmount(() => {
-  cancelMorphAnimation()
   cancelCalloutReveal()
 })
 
@@ -359,6 +282,42 @@ function applyVerticalPadding(rows) {
   return out
 }
 
+function shiftCalloutRowY(row, dy) {
+  row.dotY += dy
+  row.by = row.dotY
+  row.textY = row.dotY
+  row.polylinePoints = `${row.ax},${row.ay} ${row.bx},${row.by} ${row.dotX},${row.dotY}`
+}
+
+/** Align top label on left with top on right; pin global top row to TOP_CALLOUT_ANCHOR_Y across districts. */
+function alignTopAndPinCalloutRows(rows) {
+  if (!rows.length) return rows
+  const out = rows.map((r) => ({ ...r }))
+  const left = out.filter((r) => r.side === -1)
+  const right = out.filter((r) => r.side === 1)
+  const minL = left.length ? Math.min(...left.map((r) => r.dotY)) : null
+  const minR = right.length ? Math.min(...right.map((r) => r.dotY)) : null
+  let yTop = null
+  if (minL != null && minR != null) yTop = Math.min(minL, minR)
+  else yTop = minL ?? minR
+  if (yTop != null) {
+    if (minL != null) {
+      const d = yTop - minL
+      for (const r of left) shiftCalloutRowY(r, d)
+    }
+    if (minR != null) {
+      const d = yTop - minR
+      for (const r of right) shiftCalloutRowY(r, d)
+    }
+  }
+  const globalMin = Math.min(...out.map((r) => r.dotY))
+  const pinShift = TOP_CALLOUT_ANCHOR_Y - globalMin
+  if (Math.abs(pinShift) > 1e-6) {
+    for (const r of out) shiftCalloutRowY(r, pinShift)
+  }
+  return out
+}
+
 function measurePolylineLength(pointsStr) {
   const nums = pointsStr
     .trim()
@@ -378,22 +337,18 @@ function buildPackedCallouts(chart) {
     ...calloutForArc(arcDatum, arcGeneratorSingle, outerArcGeneratorSingle),
     segment: arcDatum.data,
   }))
-  const out = applyVerticalPadding(packed)
+  let out = applyVerticalPadding(packed)
+  out = alignTopAndPinCalloutRows(out)
   for (const r of out) {
     r.lineLength = measurePolylineLength(r.polylinePoints)
   }
   return out
 }
 
-const displaySingleArcs = computed(() => {
-  if (isMorphing.value && morphArcs.value) return morphArcs.value
-  return selectedDistrictChart.value?.arcs ?? []
-})
-
 const singleDonutCallouts = computed(() => {
   const district = selectedDistrictChart.value
   if (!district) return []
-  return buildPackedCallouts({ ...district, arcs: displaySingleArcs.value })
+  return buildPackedCallouts(district)
 })
 const centerTooltipCountry = computed(() =>
   tooltip.value.visible ? tooltip.value.country : (selectedDistrictChart.value?.district ?? ''),
@@ -502,21 +457,25 @@ function districtHasCountrySlice(district, country) {
               class="donut-svg donut-svg--single"
             >
               <g :transform="`translate(${SINGLE_CENTER},${SINGLE_CENTER})`">
-                <path
-                  v-for="arcDatum in displaySingleArcs"
-                  :key="`${selectedDistrictChart.district}-${arcDatum.data.country}`"
-                  :d="arcGeneratorSingle(arcDatum)"
-                  :fill="getCountryColor(arcDatum.data.country)"
-                  class="arc-segment"
-                  :class="{
-                    'arc-segment--dimmed':
-                      hoveredCountry && hoveredCountry !== arcDatum.data.country,
-                    'arc-segment--highlight':
-                      hoveredCountry && hoveredCountry === arcDatum.data.country,
-                  }"
-                  @mouseenter="onArcEnter(selectedDistrictChart, arcDatum.data)"
-                  @mouseleave="onArcLeave"
-                />
+                <Transition name="donut-fade" mode="out-in" @after-enter="onDonutArcsAfterEnter">
+                  <g :key="selectedDistrictChart.district" class="donut-arcs">
+                    <path
+                      v-for="arcDatum in selectedDistrictChart.arcs"
+                      :key="`${selectedDistrictChart.district}-${arcDatum.data.country}`"
+                      :d="arcGeneratorSingle(arcDatum)"
+                      :fill="getCountryColor(arcDatum.data.country)"
+                      class="arc-segment"
+                      :class="{
+                        'arc-segment--dimmed':
+                          hoveredCountry && hoveredCountry !== arcDatum.data.country,
+                        'arc-segment--highlight':
+                          hoveredCountry && hoveredCountry === arcDatum.data.country,
+                      }"
+                      @mouseenter="onArcEnter(selectedDistrictChart, arcDatum.data)"
+                      @mouseleave="onArcLeave"
+                    />
+                  </g>
+                </Transition>
                 <g
                   v-for="item in singleDonutCallouts"
                   :key="`callout-${selectedDistrictChart.district}-${item.country}`"
@@ -617,6 +576,7 @@ function districtHasCountrySlice(district, country) {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   min-height: 0;
   align-self: stretch;
   height: 100%;
@@ -724,10 +684,11 @@ function districtHasCountrySlice(district, country) {
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+  align-self: stretch;
   height: 100%;
   border: 1px solid rgba(15, 23, 42, 0.22);
   border-radius: 0 0.6rem 0.6rem 0;
-  padding: 1.2rem 0.5rem 0.5rem;
+  padding: 1rem 0.65rem 0.65rem;
   background: rgba(255, 255, 255, 0.35);
 }
 
@@ -772,7 +733,17 @@ function districtHasCountrySlice(district, country) {
   width: min(100%, 700px);
   max-width: 100%;
   height: auto;
-  margin: -4.8rem auto 0;
+  margin: -2rem auto 0;
+}
+
+.donut-fade-enter-active,
+.donut-fade-leave-active {
+  transition: opacity 0.34s ease;
+}
+
+.donut-fade-enter-from,
+.donut-fade-leave-to {
+  opacity: 0;
 }
 
 .arc-segment {

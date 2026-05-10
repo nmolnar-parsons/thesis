@@ -18,22 +18,18 @@ const steps = [
   { id: 'm3', title: '', text: '' },
   { id: 'm4', title: '', text: '' },
   { id: 'm5', title: '', text: '' },
-  // 5–7: global view linger (pacing), 8: basin annotation on global view
+  // 5–8: global 2023 linger (basin cue on HUD)
   { id: 'm6', title: '', text: '' },
   { id: 'm7', title: '', text: '' },
-  // 9–11: Mediterranean zoom + year scrub (2007 → 2023); annotation hidden
+  { id: 'm8', title: '', text: '' },
+  { id: 'm9', title: '', text: '' },
+  // 9: zoom into Mediterranean, year stays 2023 (no regional year scrub)
   { id: 'm10', title: '', text: '' },
+  // 10–11: farm dots fade in, then single linger beat; still Med camera
   { id: 'm11', title: '', text: '' },
   { id: 'm12', title: '', text: '' },
-  // 12: Mediterranean callout copy beat (no annotation)
+  // 12–14: return to global + end padding (year stays 2023)
   { id: 'm13', title: '', text: '' },
-  // 13–16: Mediterranean linger at 2023
-  { id: 'm14', title: '', text: '' },
-  { id: 'm15', title: '', text: '' },
-  // 17–19: return to global + end padding
-  { id: 'm18', title: '', text: '' },
-  { id: 'm19', title: '', text: '' },
-  { id: 'm20', title: '', text: '' },
 ]
 </script>
 

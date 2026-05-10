@@ -10,7 +10,7 @@ import 'd3-transition'
 import { onMounted, onUnmounted, nextTick, ref } from 'vue'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
-import { readColorDefaultBlue } from '../utils/readStoryColors.js'
+import { readColorDefaultBlue, readColorTunaFarmed } from '../utils/readStoryColors.js'
 
 const compactNumber = d3Format('~s')
 function formatTickShort(d) {
@@ -28,7 +28,6 @@ let svg
 let resizeObserver
 let intersectionObserver
 
-const FARMED_COLOR = '#1b4d58'
 const YEAR_START = 1965
 const YEAR_END = 2022
 const TARGET_SPECIES = new Set(['SBF', 'BFT', 'PBF'])
@@ -149,7 +148,7 @@ function drawChart() {
   const aquaStackGen = stack().keys(SERIES_KEYS)
   const aquaLayers = aquaStackGen(streamRows)
   const yScaleTop = scaleLinear().domain([0, Y_AXIS_MAX]).range([chartHeight, 0])
-  const getAquaFill = (key) => (key === 'CAPTURE' ? readColorDefaultBlue() : FARMED_COLOR)
+  const getAquaFill = (key) => (key === 'CAPTURE' ? readColorDefaultBlue() : readColorTunaFarmed())
 
   const areaTop = area()
     .curve(curveMonotoneX)
@@ -418,7 +417,7 @@ onUnmounted(() => {
 }
 
 .swatch-farmed {
-  background: #1b4d58;
+  background: var(--color-tuna-farmed);
 }
 
 .legend-label {
