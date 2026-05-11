@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import Intro from './sections/Intro.vue'
 import Map from './sections/Map.vue'
 import FishGrid from './sections/FishGrid.vue'
@@ -11,6 +11,51 @@ import DomesticImports from './sections/DomesticImports.vue'
 import Ending from './sections/Ending.vue'
 
 const minimalMode = ref(false)
+const isFullscreen = ref(false)
+
+const fullscreenApiAvailable = computed(() => {
+  const el = document.documentElement
+  return typeof el.requestFullscreen === 'function' || typeof el.webkitRequestFullscreen === 'function'
+})
+
+function getFullscreenElement() {
+  return document.fullscreenElement ?? document.webkitFullscreenElement ?? null
+}
+
+function syncFullscreenState() {
+  isFullscreen.value = !!getFullscreenElement()
+}
+
+async function exitDocFullscreen() {
+  const exit = document.exitFullscreen?.bind(document) ?? document.webkitExitFullscreen?.bind(document)
+  if (!exit) return
+  try {
+    const result = exit()
+    if (result && typeof result.then === 'function') await result
+  } catch {
+    /* user gesture / policy */
+  }
+}
+
+async function requestDocFullscreen() {
+  const el = document.documentElement
+  const req = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el)
+  if (!req) return
+  try {
+    const result = req()
+    if (result && typeof result.then === 'function') await result
+  } catch {
+    /* user gesture / policy */
+  }
+}
+
+async function toggleMinimalFullscreen() {
+  if (getFullscreenElement()) {
+    await exitDocFullscreen()
+    return
+  }
+  await requestDocFullscreen()
+}
 
 function toggleMinimalMode() {
   minimalMode.value = !minimalMode.value
@@ -35,11 +80,26 @@ function advanceToNextSection() {
   }
 }
 
+function onFullscreenChange() {
+  syncFullscreenState()
+}
+
+watch(minimalMode, (enabled) => {
+  if (!enabled && getFullscreenElement()) {
+    exitDocFullscreen()
+  }
+})
+
 onMounted(() => {
   window.toggleMinimalMode = toggleMinimalMode
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  syncFullscreenState()
 })
 
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
   if (window.toggleMinimalMode === toggleMinimalMode) {
     delete window.toggleMinimalMode
   }
@@ -63,6 +123,14 @@ onUnmounted(() => {
       aria-label="Advance to next section"
       @click="advanceToNextSection"
     />
+    <button
+      v-if="minimalMode && fullscreenApiAvailable"
+      type="button"
+      class="minimal-fullscreen-hitbox"
+      aria-label="Enter or exit fullscreen"
+      :aria-pressed="isFullscreen"
+      @click="toggleMinimalFullscreen"
+    />
   </main>
 </template>
 
@@ -70,6 +138,21 @@ onUnmounted(() => {
 .minimal-next-hitbox {
   position: fixed;
   left: 0.75rem;
+  bottom: 0.75rem;
+  width: clamp(3rem, 10vw, 4.5rem);
+  height: clamp(3rem, 10vw, 4.5rem);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.minimal-fullscreen-hitbox {
+  position: fixed;
+  right: 0.75rem;
   bottom: 0.75rem;
   width: clamp(3rem, 10vw, 4.5rem);
   height: clamp(3rem, 10vw, 4.5rem);
