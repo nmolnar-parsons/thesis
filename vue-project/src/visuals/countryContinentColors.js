@@ -176,6 +176,7 @@ export const COUNTRY_COLOR_OVERRIDES = {
   'South Africa': '#fb8c00',
   Australia: '#ec407a',
   'New Zealand': '#f48fb1',
+  Norway: '#16a34a',
 }
 
 export function normalizeCountry(country) {
@@ -206,6 +207,83 @@ export function getContinent(country) {
   const canon = resolveCanonicalCountry(country)
   if (!canon) return 'Other'
   return CANONICAL_COUNTRY_TO_CONTINENT[canon] || 'Other'
+}
+
+function continentPaletteForSubset(continent, avoidPastels) {
+  const base = CONTINENT_COLORS[continent] || CONTINENT_COLORS.Other
+  if (avoidPastels && base.length > 3) return base.slice(1)
+  return base
+}
+
+/**
+ * Colors for a fixed set of country names (e.g. all countries shown in District Donuts).
+ * Spreads each continent's subset across its palette; optional trim drops the lightest swatch for legibility.
+ */
+export function buildCountryColorMapForSubset(countryNames, { avoidPastels = true } = {}) {
+  const map = new Map()
+  const seen = new Set()
+  const entries = []
+  for (const raw of countryNames) {
+    if (raw == null || raw === '') continue
+    const norm = normalizeCountry(raw)
+    if (!norm) continue
+    const canon = resolveCanonicalCountry(raw)
+    const key = canon ?? norm
+    if (seen.has(key)) continue
+    seen.add(key)
+    const continent = getContinent(raw)
+    entries.push({ key, canon, norm, continent })
+  }
+
+  function excludedFromSpread({ canon, norm }) {
+    if (canon === 'Japan' || norm.toLowerCase() === 'japan') return true
+    if (canon && COUNTRY_COLOR_OVERRIDES[canon]) return true
+    return false
+  }
+
+  const byContinent = new Map()
+  for (const e of entries) {
+    if (excludedFromSpread(e)) continue
+    const list = byContinent.get(e.continent) || []
+    list.push(e.key)
+    byContinent.set(e.continent, list)
+  }
+
+  for (const [continent, names] of byContinent.entries()) {
+    names.sort((a, b) => a.localeCompare(b, 'en'))
+    const palette = continentPaletteForSubset(continent, avoidPastels)
+    const denom = Math.max(1, names.length - 1)
+    const last = palette.length - 1
+    names.forEach((name, index) => {
+      const paletteIndex = last <= 0 ? 0 : Math.round((index / denom) * last)
+      map.set(name, palette[paletteIndex])
+    })
+  }
+
+  for (const { key, canon, norm } of entries) {
+    if (canon === 'Japan' || norm.toLowerCase() === 'japan') {
+      map.set(key, JAPAN_RED)
+      continue
+    }
+    if (canon && COUNTRY_COLOR_OVERRIDES[canon]) {
+      map.set(key, COUNTRY_COLOR_OVERRIDES[canon])
+    }
+  }
+
+  return map
+}
+
+/** Resolve color using override → Japan → subset map (same precedence as getCountryColor). */
+export function getColorFromMap(map, country) {
+  if (country == null || country === '') return CONTINENT_COLORS.Other[2]
+  const norm = normalizeCountry(country)
+  const canon = resolveCanonicalCountry(country)
+  if (COUNTRY_COLOR_OVERRIDES[canon]) return COUNTRY_COLOR_OVERRIDES[canon]
+  if (COUNTRY_COLOR_OVERRIDES[norm]) return COUNTRY_COLOR_OVERRIDES[norm]
+  if (canon === 'Japan' || norm.toLowerCase() === 'japan') return JAPAN_RED
+  if (canon && map.has(canon)) return map.get(canon)
+  if (!canon && map.has(norm)) return map.get(norm)
+  return CONTINENT_COLORS.Other[2]
 }
 
 function buildStableCountryColorMap() {

@@ -95,6 +95,14 @@ const STAGES = [
   {
     species: [BLUEFIN_CODE],
     yearRange: [1965, 1980],
+    annotations: [
+      {
+        year: 1980,
+        y1: 0,
+        y2: 120000,
+        label: 'Bluefin Tuna is the King of Sushi',
+      },
+    ],
     
   },
   {
@@ -803,7 +811,7 @@ onUnmounted(() => {
 <template>
   <div ref="wrapRef" class="stacked-wrap">
     <h1 class="visual-title chart-main-title">
-      Bluefin Tuna Catch 1965 to {{ chartEndYear }}
+      58 Years of Bluefin Catch Data
     </h1>
     <div class="stacked-chart-body">
       <div v-if="SHOW_ANNOTATION_TEXT_INPUT" class="annotation-text-inputs" aria-label="Annotation labels">

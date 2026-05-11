@@ -14,23 +14,29 @@ defineProps({
 
 <template>
   <StorySection id="country-production" height="min-screen" width="full">
-    <SectionGrid :columns="12" gap="1.25rem" align="start">
-      <div v-if="!minimalMode" class="story-copy story-copy--top production-copy">
-        <CopyBlock title="Global Production">
-          <p>
-            The streamgraph tracks annual bluefin tuna imports by country. Stream thickness shows
-            each country's volume contribution over time.
-          </p>
-        </CopyBlock>
-      </div>
-      <div class="production-visual">
-        <TunaProductionStreamgraphVisual />
-      </div>
-    </SectionGrid>
+    <div class="country-production-shell">
+      <SectionGrid :columns="12" gap="1.25rem" align="start">
+        <div v-if="!minimalMode" class="story-copy story-copy--top production-copy">
+          <CopyBlock title="Global Production">
+            <p>
+              The streamgraph tracks annual bluefin tuna imports by country. Stream thickness shows
+              each country's volume contribution over time.
+            </p>
+          </CopyBlock>
+        </div>
+        <div class="production-visual">
+          <TunaProductionStreamgraphVisual />
+        </div>
+      </SectionGrid>
+    </div>
   </StorySection>
 </template>
 
 <style scoped>
+.country-production-shell {
+  padding-top: 64px;
+}
+
 .production-copy {
   grid-column: 3 / span 8;
 }

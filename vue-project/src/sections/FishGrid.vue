@@ -56,11 +56,11 @@ onUnmounted(() => {
   ro?.disconnect()
 })
 
-/** Single-fish callout (steps 1–3). */
+/** Single-fish callout (steps 1–3). Use `\n` or a multi-line template string in `body` for line breaks. */
 const singleFishAnnotations = [
   {
     id: 'single-bluefin',
-    body: 'This fish stands in for one animal counted in the 2023 Toyosu auction records.',
+    body: 'Bluefin Tuna\n490 - 550 lbs\n6 - 8 ft',
   },
 ]
 

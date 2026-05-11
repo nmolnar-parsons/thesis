@@ -10,10 +10,13 @@ import { readColorDefaultBlue, readColorTunaFarmed } from '../utils/readStoryCol
 const YEAR_START = 1965
 const YEAR_END = 2023
 const DEFAULT_PROJECTION = 'naturalEarth'
-/** 250 kg per bluefin on average; convert head-count to metric tonnes. */
-const COUNT_TO_TONNE = 250 / 1000
+/** 1 bluefin ≈ 250 kg = 1/4 tonne. Converts head-count (`count_${y}`) to metric tonnes. */
+const COUNT_TO_TONNE = 1 / 4
+/** Inverse: 1 tonne ≈ 4 bluefin. Converts weight (`tonne_${y}`) to head-count. */
+const TONNE_TO_COUNT = 1 / COUNT_TO_TONNE
 /** Upper bounds for each ramp step (Mapbox `step`: default color applies below first stop). */
-const CATCH_TONNE_STEP_STOPS = [100, 250, 500, 1000, 2000, 4000, 7000, 12000, 18000, 28000]
+const CATCH_TONNE_STEP_STOPS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000]
+
 /**
  * Colors above `--color-default-blue` tier. Must align in length with CATCH_TONNE_STEP_STOPS.
  */
@@ -42,6 +45,8 @@ const STEP_YEAR_FULLVIEW_END = 4
 /** Full global view, year already at 2023; extra scroll beats before regional zoom. */
 const STEP_FULLVIEW_LINGER_START = 5
 const STEP_FULLVIEW_LINGER_END = 8
+/** Mediterranean basin SVG callout: first shown at Map.vue `m8` (step index 7), not m6–m7. */
+const STEP_BASIN_ANNOTATION_START = 7
 /** Mediterranean camera: zoom from global with year frozen at 2023 (see Map.vue). */
 const STEP_MEDITERRANEAN_START = 9
 /** First step ICCAT farms may fade in (after med zoom settles). */
@@ -169,7 +174,9 @@ function parseYearlyTotals5deg() {
     const features = Array.isArray(parsed?.features) ? parsed.features : []
     const yearly = new Map()
     for (let y = YEAR_START; y <= YEAR_END; y += 1) {
-      yearly.set(y, { count: 0, tonnes: 0 })
+      // `combinedCount`/`combinedTonnes` fold the other dimension via the 1 bluefin = 1/4 tonne
+      // conversion so cells reporting only tonnes (or only count) for a given year still register.
+      yearly.set(y, { count: 0, tonnes: 0, combinedCount: 0, combinedTonnes: 0 })
     }
     for (const feature of features) {
       const fp = feature?.properties || {}
@@ -179,6 +186,8 @@ function parseYearlyTotals5deg() {
         const entry = yearly.get(y)
         entry.count += count
         entry.tonnes += tonnes
+        entry.combinedCount += count + tonnes * TONNE_TO_COUNT
+        entry.combinedTonnes += tonnes + count * COUNT_TO_TONNE
       }
     }
     return yearly
@@ -191,7 +200,7 @@ function parseYearlyTotals5deg() {
 const yearlyTotals5deg = parseYearlyTotals5deg()
 
 const countRange = computed(() => {
-  const values = Array.from(yearlyTotals5deg.values(), (d) => d.count)
+  const values = Array.from(yearlyTotals5deg.values(), (d) => d.combinedCount)
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 1)
   return { min, max }
@@ -199,9 +208,9 @@ const countRange = computed(() => {
 
 const currentYearTotals = computed(() => {
   const cy = currentYear.value
-  const entry = yearlyTotals5deg.get(cy) || { count: 0, tonnes: 0 }
-  const totalCount = entry.count
-  return { totalCount }
+  const entry =
+    yearlyTotals5deg.get(cy) || { count: 0, tonnes: 0, combinedCount: 0, combinedTonnes: 0 }
+  return { totalCount: entry.combinedCount }
 })
 
 function normalize(value, min, max) {
@@ -249,10 +258,10 @@ const narrativeCopy = computed(() => {
 
 function overlayOpacity() {
   const step = props.activeStep
-  // Only show the basin annotation during the pre-zoom global 2023 linger;
-  // once the camera has eased into the Med, the zoom itself replaces the cue.
-  const isGlobalFrozen2023 = step >= STEP_FULLVIEW_LINGER_START && step <= STEP_FULLVIEW_LINGER_END
-  return isGlobalFrozen2023 ? 1 : 0
+  // Basin annotation only in the tail of the global 2023 linger (from m8), not the first beats.
+  const showBasinCallout =
+    step >= STEP_BASIN_ANNOTATION_START && step <= STEP_FULLVIEW_LINGER_END
+  return showBasinCallout ? 1 : 0
 }
 
 function formatCount(v) {
@@ -540,7 +549,7 @@ onUnmounted(() => {
 
 <template>
   <div class="map-frame">
-    <h1 class="visual-title visual-title--on-dark map-title">Where Has All the Tuna Gone?</h1>
+    <h1 class="visual-title visual-title--on-dark map-title">Where We Catch Bluefin is Shifting</h1>
     <div ref="mapRef" class="map-host" />
 
     <div class="hud-row">

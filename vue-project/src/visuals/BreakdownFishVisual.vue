@@ -46,16 +46,6 @@ function easedTransitionProgress(t) {
   return easeInOutCubic((t - start) / (end - start))
 }
 
-/** Step 0 only: fade-in starts at this fraction of scroll progress through the step (scrollama 0–1). */
-const FIRST_FISH_FADE_START = 0.8
-
-function firstFishEnterAlpha(rawStepProgress, reducedMotion) {
-  if (reducedMotion) return 1
-  const p = clamp01(rawStepProgress)
-  if (p <= FIRST_FISH_FADE_START) return 0
-  return clamp01((p - FIRST_FISH_FADE_START) / (1 - FIRST_FISH_FADE_START))
-}
-
 const fishTotals = computed(() => parse2023Counts(csvRaw))
 
 function drawImageFish(rect, alpha = 1) {
@@ -183,8 +173,8 @@ function draw() {
       : rawProgress
 
   if (baseStep === 0) {
-    const enterAlpha = firstFishEnterAlpha(rawProgress, reduced)
-    drawImageFish(singleCenterRect, enterAlpha)
+    // Step 0 is linger only: fish is fully visible (no fade); copy still drives scroll height.
+    drawImageFish(singleCenterRect, 1)
     return
   }
 

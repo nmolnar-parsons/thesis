@@ -115,7 +115,7 @@ onUnmounted(() => {
             }"
             :aria-hidden="titleAriaHidden"
           >
-            The Last Sushi <br>in the World
+            <span class="intro-title-inner">The Last Sushi <br />in the World</span>
           </h1>
         </div>
       </div>
@@ -204,6 +204,12 @@ onUnmounted(() => {
     0 0 4px rgba(0, 0, 0, 0.8),
     0 4px 12px rgba(0, 0, 0, 0.6),
     0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* One flex item so line breaks and letter-spacing match plain centered text. */
+.intro-title-inner {
+  display: block;
+  text-align: center;
 }
 
 @media (max-width: 720px) {

@@ -319,7 +319,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="wrapRef" class="streamgraph-wrap">
-    <h1 class="visual-title streamgraph-title">Bluefin Tuna: Wild Capture vs Farmed</h1>
+    <h1 class="visual-title streamgraph-title">Your Bluefin is Farmed</h1>
     <div class="chart-plot-layer">
       <div ref="hostRef" class="d3-host" />
       <aside class="legend" role="note" aria-label="Production type color key">

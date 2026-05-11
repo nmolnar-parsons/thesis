@@ -53,6 +53,10 @@ const steps = [
 </template>
 
 <style scoped>
+:deep(#map.story-section) {
+  padding-bottom: 32px;
+}
+
 #map :deep(.sticky-graphic) {
   background: var(--color-default-blue);
 }

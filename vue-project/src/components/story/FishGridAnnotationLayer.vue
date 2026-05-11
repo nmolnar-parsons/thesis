@@ -20,9 +20,16 @@ function clamp01(v) {
 
 const showSingleAnnotations = computed(() => props.activeStep >= 1 && props.activeStep <= 3)
 
+/** Step 1: hold annotations at 0 until this fraction so the fish lands before labels appear. */
+const ANNOTATION_STEP1_FADE_START = 0.45
+
 const layerOpacity = computed(() => {
   if (!showSingleAnnotations.value) return 0
-  if (props.activeStep === 1) return clamp01(props.stepProgress)
+  if (props.activeStep === 1) {
+    const p = clamp01(props.stepProgress)
+    if (p <= ANNOTATION_STEP1_FADE_START) return 0
+    return clamp01((p - ANNOTATION_STEP1_FADE_START) / (1 - ANNOTATION_STEP1_FADE_START))
+  }
   return 1
 })
 
@@ -144,6 +151,7 @@ const singlePct = computed(() => {
   line-height: 1.35;
   color: var(--story-annotation-copy-body);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  white-space: pre-line;
 }
 
 @media (max-width: 980px) {

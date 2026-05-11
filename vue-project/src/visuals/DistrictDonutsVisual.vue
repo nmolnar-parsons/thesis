@@ -3,7 +3,12 @@ import { arc, pie } from 'd3-shape'
 import { csvParse } from 'd3-dsv'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import csvRaw from '../data/tuna_imports_usa_customs.csv?raw'
-import { CONTINENT_ORDER, getContinent, getCountryColor } from './countryContinentColors.js'
+import {
+  CONTINENT_ORDER,
+  buildCountryColorMapForSubset,
+  getColorFromMap,
+  getContinent,
+} from './countryContinentColors.js'
 
 const YEAR_TARGET = 2025
 const BLUEFIN_PRODUCT = 'Tuna Bluefin Fresh'
@@ -26,8 +31,11 @@ const CALLOUT_DOT_R = 5.5
 const CALLOUT_TEXT_GAP = 14
 const CALLOUT_VERTICAL_GAP = 28
 const CALLOUT_REVEAL_DURATION_MS = 440
-/** Donut-centered Y for top callout row; pins layout across district switches */
-const TOP_CALLOUT_ANCHOR_Y = -(SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP + 42)
+/** Same radial offset above/below y=0: label dots sit on ±(outer+bump+pad) from donut center */
+const CALLOUT_AXIS_PAD = 26
+const TOP_CALLOUT_ANCHOR_Y = -(SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP + CALLOUT_AXIS_PAD)
+const BOTTOM_CALLOUT_ANCHOR_Y = SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP + CALLOUT_AXIS_PAD
+const CALLOUT_VERTICAL_BAND = BOTTOM_CALLOUT_ANCHOR_Y - TOP_CALLOUT_ANCHOR_Y
 
 const NYC_DISTRICT_KEY = 'New York, NY'
 
@@ -113,6 +121,21 @@ const districtCharts = computed(() => {
     .map(chartFromDistrictEntry)
     .sort((a, b) => b.totalTonnes - a.totalTonnes)
 })
+
+/** Union of all country strings in the donuts view — subset palette is built from this only. */
+const donutCountriesInVisual = computed(() => {
+  const set = new Set()
+  for (const chart of districtCharts.value) {
+    for (const seg of chart.segments) set.add(seg.country)
+  }
+  return [...set]
+})
+
+const donutCountryColorMap = computed(() => buildCountryColorMapForSubset(donutCountriesInVisual.value))
+
+function colorForCountry(country) {
+  return getColorFromMap(donutCountryColorMap.value, country)
+}
 
 /** Fit all menu donuts in the left column without scrolling (cols capped for narrow 1/3 strip). */
 const menuGridLayout = computed(() => {
@@ -227,7 +250,7 @@ function calloutForArc(arcDatum, arcGen, outerArcGen) {
 
   return {
     country: arcDatum.data.country,
-    color: getCountryColor(arcDatum.data.country),
+    color: colorForCountry(arcDatum.data.country),
     side,
     dotR: CALLOUT_DOT_R,
     ax,
@@ -289,29 +312,56 @@ function shiftCalloutRowY(row, dy) {
   row.polylinePoints = `${row.ax},${row.ay} ${row.bx},${row.by} ${row.dotX},${row.dotY}`
 }
 
-/** Align top label on left with top on right; pin global top row to TOP_CALLOUT_ANCHOR_Y across districts. */
-function alignTopAndPinCalloutRows(rows) {
+/**
+ * When left and right each have at least one callout above donut midline (dotY < 0), align the topmost
+ * upper callout on each side to the same y. Skips when a side has no upper labels (avoids Houston-style skew).
+ */
+function alignLeftRightTopHemisphereCalloutTops(rows) {
   if (!rows.length) return rows
   const out = rows.map((r) => ({ ...r }))
-  const left = out.filter((r) => r.side === -1)
-  const right = out.filter((r) => r.side === 1)
-  const minL = left.length ? Math.min(...left.map((r) => r.dotY)) : null
-  const minR = right.length ? Math.min(...right.map((r) => r.dotY)) : null
-  let yTop = null
-  if (minL != null && minR != null) yTop = Math.min(minL, minR)
-  else yTop = minL ?? minR
-  if (yTop != null) {
-    if (minL != null) {
-      const d = yTop - minL
-      for (const r of left) shiftCalloutRowY(r, d)
-    }
-    if (minR != null) {
-      const d = yTop - minR
-      for (const r of right) shiftCalloutRowY(r, d)
-    }
-  }
+  const leftTop = out.filter((r) => r.side === -1 && r.dotY < 0)
+  const rightTop = out.filter((r) => r.side === 1 && r.dotY < 0)
+  if (!leftTop.length || !rightTop.length) return out
+  const minL = Math.min(...leftTop.map((r) => r.dotY))
+  const minR = Math.min(...rightTop.map((r) => r.dotY))
+  const yTop = Math.min(minL, minR)
+  for (const r of out.filter((x) => x.side === -1)) shiftCalloutRowY(r, yTop - minL)
+  for (const r of out.filter((x) => x.side === 1)) shiftCalloutRowY(r, yTop - minR)
+  return out
+}
+
+/** Scale label dotY about stack midpoint so span matches symmetric band (then bottom pin hits both anchors). */
+function scaleCalloutRowsToVerticalBand(rows, band) {
+  if (!rows.length) return rows
+  const out = rows.map((r) => ({ ...r }))
   const globalMin = Math.min(...out.map((r) => r.dotY))
-  const pinShift = TOP_CALLOUT_ANCHOR_Y - globalMin
+  const globalMax = Math.max(...out.map((r) => r.dotY))
+  const span = globalMax - globalMin
+  if (out.length <= 1 || span <= 1e-6 || span >= band - 1e-6) return out
+  const mid = (globalMin + globalMax) / 2
+  const scale = band / span
+  for (const r of out) {
+    r.dotY = mid + (r.dotY - mid) * scale
+    r.by = r.dotY
+    r.textY = r.dotY
+    r.polylinePoints = `${r.ax},${r.ay} ${r.bx},${r.by} ${r.dotX},${r.dotY}`
+  }
+  return out
+}
+
+/**
+ * Pin bottom row to BOTTOM anchor. If stack is taller than the band, floor the top at TOP anchor.
+ * Pairs with scaleCalloutRowsToVerticalBand: after scaling, span ≈ band so one bottom pin sets min=TOP and max=BOTTOM.
+ */
+function pinCalloutsInVerticalBand(rows) {
+  if (!rows.length) return rows
+  const out = rows.map((r) => ({ ...r }))
+  const globalMin = Math.min(...out.map((r) => r.dotY))
+  const globalMax = Math.max(...out.map((r) => r.dotY))
+  let pinShift = BOTTOM_CALLOUT_ANCHOR_Y - globalMax
+  if (globalMin + pinShift < TOP_CALLOUT_ANCHOR_Y) {
+    pinShift = TOP_CALLOUT_ANCHOR_Y - globalMin
+  }
   if (Math.abs(pinShift) > 1e-6) {
     for (const r of out) shiftCalloutRowY(r, pinShift)
   }
@@ -338,7 +388,9 @@ function buildPackedCallouts(chart) {
     segment: arcDatum.data,
   }))
   let out = applyVerticalPadding(packed)
-  out = alignTopAndPinCalloutRows(out)
+  out = alignLeftRightTopHemisphereCalloutTops(out)
+  out = scaleCalloutRowsToVerticalBand(out, CALLOUT_VERTICAL_BAND)
+  out = pinCalloutsInVerticalBand(out)
   for (const r of out) {
     r.lineLength = measurePolylineLength(r.polylinePoints)
   }
@@ -389,8 +441,7 @@ function districtHasCountrySlice(district, country) {
 
 <template>
   <div class="imports-wrap">
-    <h1 class="visual-title imports-title">Bluefin imports by U.S. customs district (2025)</h1>
-
+    <h1 class="visual-title imports-title">Where Does Your Sushi Come From?</h1>
     <div class="imports-body imports-body--with-menu">
       <aside class="district-menu" aria-label="Customs district selection">
         <div
@@ -423,7 +474,7 @@ function districtHasCountrySlice(district, country) {
                     v-for="arcDatum in district.arcs"
                     :key="`${district.district}-${arcDatum.data.country}`"
                     :d="arcGeneratorGrid(arcDatum)"
-                    :fill="getCountryColor(arcDatum.data.country)"
+                    :fill="colorForCountry(arcDatum.data.country)"
                     class="arc-segment arc-segment--menu"
                     :class="{
                       'arc-segment--dimmed':
@@ -447,23 +498,30 @@ function districtHasCountrySlice(district, country) {
           <article
             class="district-card district-card--single"
           >
-            <h3 class="district-title">{{ selectedDistrictChart.district }}</h3>
-            <p class="district-total">{{ formatTonnes(selectedDistrictChart.totalTonnes) }} t total</p>
-
-            <svg
-              :width="SINGLE_SVG_SIZE"
-              :height="SINGLE_SVG_SIZE"
-              :viewBox="`0 0 ${SINGLE_SVG_SIZE} ${SINGLE_SVG_SIZE}`"
-              class="donut-svg donut-svg--single"
-            >
-              <g :transform="`translate(${SINGLE_CENTER},${SINGLE_CENTER})`">
+            <div class="district-single-stack">
+              <h3
+                class="district-heading-over-donut district-heading-over-donut--float"
+              >
+                <span class="district-heading-over-donut__name">{{ selectedDistrictChart.district }}</span>
+                <span class="district-heading-over-donut__tonnes">
+                  {{ formatTonnes(selectedDistrictChart.totalTonnes) }} t total
+                </span>
+              </h3>
+              <div class="district-donut-stage">
+                <svg
+                  :width="SINGLE_SVG_SIZE"
+                  :height="SINGLE_SVG_SIZE"
+                  :viewBox="`0 0 ${SINGLE_SVG_SIZE} ${SINGLE_SVG_SIZE}`"
+                  class="donut-svg donut-svg--single"
+                >
+                  <g :transform="`translate(${SINGLE_CENTER},${SINGLE_CENTER})`">
                 <Transition name="donut-fade" mode="out-in" @after-enter="onDonutArcsAfterEnter">
                   <g :key="selectedDistrictChart.district" class="donut-arcs">
                     <path
                       v-for="arcDatum in selectedDistrictChart.arcs"
                       :key="`${selectedDistrictChart.district}-${arcDatum.data.country}`"
                       :d="arcGeneratorSingle(arcDatum)"
-                      :fill="getCountryColor(arcDatum.data.country)"
+                      :fill="colorForCountry(arcDatum.data.country)"
                       class="arc-segment"
                       :class="{
                         'arc-segment--dimmed':
@@ -535,8 +593,10 @@ function districtHasCountrySlice(district, country) {
                     {{ centerTooltipDetail }}
                   </text>
                 </g>
-              </g>
-            </svg>
+                  </g>
+                </svg>
+              </div>
+            </div>
           </article>
         </template>
       </div>
@@ -548,6 +608,7 @@ function districtHasCountrySlice(district, country) {
 <style scoped>
 .imports-wrap {
   position: relative;
+  padding: var(--story-section-padding-y) var(--story-section-padding-x);
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);
 }
@@ -683,12 +744,14 @@ function districtHasCountrySlice(district, country) {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: stretch;
   min-width: 0;
+  min-height: 0;
   align-self: stretch;
   height: 100%;
   border: 1px solid rgba(15, 23, 42, 0.22);
   border-radius: 0 0.6rem 0.6rem 0;
-  padding: 1rem 0.65rem 0.65rem;
+  padding: 0.5rem 0.65rem 0.65rem;
   background: rgba(255, 255, 255, 0.35);
 }
 
@@ -697,30 +760,69 @@ function districtHasCountrySlice(district, country) {
 }
 
 .district-card--single {
-  min-height: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
-}
-
-.district-card--single .district-title {
-  margin-bottom: 0;
-}
-
-.district-card--single .district-total {
-  margin: 0.2rem 0 0.25rem;
-}
-
-.district-title {
   margin: 0;
+}
+
+.district-single-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  width: 100%;
+  max-width: min(100%, 700px);
+  margin-inline: auto;
+  /* Reserve space so the floating district title sits inside the panel, not above its border */
+  padding-top: clamp(2.25rem, 6.2vw, 2.8rem);
+}
+
+.district-heading-over-donut--float {
+  position: absolute;
+  top: 0.35rem;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  margin: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.district-donut-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.district-heading-over-donut {
+  flex-shrink: 0;
+  margin: 0;
+  width: 100%;
   text-align: center;
   font-size: var(--font-size-ui);
-  line-height: 1.3;
+  font-weight: var(--font-weight-ui);
+  line-height: 1.25;
   color: #0f172a;
 }
 
-.district-total {
-  margin: 0.35rem 0 0.6rem;
+.district-heading-over-donut__name {
+  display: block;
+}
+
+.district-heading-over-donut__tonnes {
+  display: block;
+  margin-top: 0.15rem;
   font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-ui);
   color: #475569;
 }
 
@@ -730,10 +832,11 @@ function districtHasCountrySlice(district, country) {
 
 .donut-svg--single {
   display: block;
-  width: min(100%, 700px);
-  max-width: 100%;
+  width: auto;
   height: auto;
-  margin: -2rem auto 0;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0;
 }
 
 .donut-fade-enter-active,
