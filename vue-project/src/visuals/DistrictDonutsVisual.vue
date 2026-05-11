@@ -611,6 +611,12 @@ function districtHasCountrySlice(district, country) {
   padding: var(--story-section-padding-y) var(--story-section-padding-x);
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);
+  /* Fill the section ("min-screen" => 100vh on the parent .story-section) and flex-center the title + body
+     so the donut visual no longer hugs the top edge of the screen. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .imports-title {
@@ -621,7 +627,7 @@ function districtHasCountrySlice(district, country) {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  max-width: 1280px;
+  max-width: min(96vw, 1760px);
   margin: 0 auto;
 }
 
@@ -777,7 +783,7 @@ function districtHasCountrySlice(district, country) {
   min-height: 0;
   align-items: center;
   width: 100%;
-  max-width: min(100%, 700px);
+  max-width: min(100%, 1000px);
   margin-inline: auto;
   /* Reserve space so the floating district title sits inside the panel, not above its border */
   padding-top: clamp(2.25rem, 6.2vw, 2.8rem);
@@ -931,6 +937,16 @@ function districtHasCountrySlice(district, country) {
   stroke: rgba(255, 255, 255, 0.96);
   stroke-width: 3;
   stroke-linejoin: round;
+}
+
+@media (min-width: 1600px) {
+  .district-menu-grid {
+    gap: clamp(0.35rem, 1.4vw, 0.7rem);
+  }
+
+  .district-menu-card__label {
+    font-size: clamp(0.7rem, 1.2vw, 0.95rem);
+  }
 }
 
 @media (max-width: 720px) {

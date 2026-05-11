@@ -345,8 +345,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: var(--viz-chart-wrap-height);
-  max-height: var(--viz-chart-wrap-max-height);
+  /* Local override: take more of the viewport on 1920x1080 without touching the shared --viz-chart-wrap-* tokens (StackedBars stays as-is). */
+  height: clamp(480px, 92vh, 1040px);
+  max-height: 1040px;
   overflow: hidden;
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);

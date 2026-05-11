@@ -19,10 +19,8 @@ const steps = [
   { id: 'm4', title: '', text: '' },
   { id: 'm5', title: '', text: '' },
   // 5–8: global 2023 linger (basin cue on HUD)
-  { id: 'm6', title: '', text: '' },
   { id: 'm7', title: '', text: '' },
   { id: 'm8', title: '', text: '' },
-  { id: 'm9', title: '', text: '' },
   // 9: zoom into Mediterranean, year stays 2023 (no regional year scrub)
   { id: 'm10', title: '', text: '' },
   // 10–11: farm dots fade in, then single linger beat; still Med camera
@@ -30,6 +28,7 @@ const steps = [
   { id: 'm12', title: '', text: '' },
   // 12–14: return to global + end padding (year stays 2023)
   { id: 'm13', title: '', text: '' },
+  { id: 'm14', title: '', text: '' },
 ]
 </script>
 

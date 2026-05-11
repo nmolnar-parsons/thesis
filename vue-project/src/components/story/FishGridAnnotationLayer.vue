@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   /** Result of computeFishBreakdownLayout, or null before measure */
@@ -23,10 +23,48 @@ const showSingleAnnotations = computed(() => props.activeStep >= 1 && props.acti
 /** Step 1: hold annotations at 0 until this fraction so the fish lands before labels appear. */
 const ANNOTATION_STEP1_FADE_START = 0.45
 
+/**
+ * Forward-scroll guard: scrollama fires onStepEnter (activeStep flips) before onStepProgress resets,
+ * so for one tick stepProgress still holds the previous step's tail (~1). Without gating, layerOpacity
+ * paints the annotation at full alpha for that tick before snapping back to 0 and fading in — the flash.
+ * Mirrors the pattern in BreakdownFishVisual.vue.
+ */
+const waitingForStepProgressReset = ref(false)
+const pendingStep = ref(-1)
+
+watch(
+  () => props.activeStep,
+  (nextStep, prevStep) => {
+    if (nextStep === prevStep) return
+    const isForwardScroll = nextStep > prevStep
+    if (isForwardScroll) {
+      waitingForStepProgressReset.value = true
+      pendingStep.value = nextStep
+    } else {
+      waitingForStepProgressReset.value = false
+      pendingStep.value = -1
+    }
+  },
+)
+
+watch(
+  () => props.stepProgress,
+  (nextProgress) => {
+    if (waitingForStepProgressReset.value && clamp01(nextProgress) <= 0.05) {
+      waitingForStepProgressReset.value = false
+    }
+  },
+)
+
+const gatedProgress = computed(() => {
+  if (waitingForStepProgressReset.value && props.activeStep === pendingStep.value) return 0
+  return clamp01(props.stepProgress)
+})
+
 const layerOpacity = computed(() => {
   if (!showSingleAnnotations.value) return 0
   if (props.activeStep === 1) {
-    const p = clamp01(props.stepProgress)
+    const p = gatedProgress.value
     if (p <= ANNOTATION_STEP1_FADE_START) return 0
     return clamp01((p - ANNOTATION_STEP1_FADE_START) / (1 - ANNOTATION_STEP1_FADE_START))
   }

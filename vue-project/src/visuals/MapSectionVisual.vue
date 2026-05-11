@@ -53,10 +53,6 @@ const STEP_MEDITERRANEAN_START = 9
 const STEP_MEDITERRANEAN_FARMS_START = 10
 /** Single linger beat after farms appear while still zoomed into the Med. */
 const STEP_MEDITERRANEAN_FARM_LINGER_END = 11
-/** Last Mediterranean-framed step before easing back to global. */
-const STEP_MEDITERRANEAN_END = STEP_MEDITERRANEAN_FARM_LINGER_END
-/** Zoom out to global + trailing scroll steps (three beats; see Map.vue). */
-const STEP_RETURN_FULL = 12
 const STEP_ANIMATION_DURATION_MS = 2600
 /** ICCAT farm points: STEP_MEDITERRANEAN_FARMS_START .. FARM_LINGER_END (Map.vue); zoom-gated. */
 const ICCAT_FARMS_SOURCE_ID = 'iccat-fish-farms'
@@ -242,16 +238,10 @@ const narrativeCopy = computed(() => {
   if (props.activeStep === STEP_MEDITERRANEAN_START) {
     return MEDITERRANEAN_ZOOM_FILLER
   }
-  if (
-    props.activeStep >= STEP_MEDITERRANEAN_FARMS_START
-    && props.activeStep <= STEP_MEDITERRANEAN_FARM_LINGER_END
-  ) {
+  if (props.activeStep >= STEP_MEDITERRANEAN_FARMS_START) {
     return props.activeStep === STEP_MEDITERRANEAN_FARM_LINGER_END
       ? LINGER_2023_FILLER
       : MEDITERRANEAN_FARMS_FILLER
-  }
-  if (props.activeStep >= STEP_RETURN_FULL) {
-    return 'Regional hotspots are intensifying while the full ocean picture continues to change.'
   }
   return DEFAULT_FILLER
 })
@@ -373,7 +363,6 @@ function syncFarmCirclesVisibility() {
   const step = props.activeStep
   const inMedFarmBeat =
     step >= STEP_MEDITERRANEAN_FARMS_START
-    && step <= STEP_MEDITERRANEAN_FARM_LINGER_END
     && currentYear.value === YEAR_END
   const show = inMedFarmBeat && map.getZoom() >= FARM_CIRCLES_MIN_ZOOM
   if (show === farmCirclesFadeTargetShow) return
@@ -389,11 +378,11 @@ function attachFarmCirclesViewportListeners() {
 
 function cameraForStep(stepIndex) {
   const cameraPadding = { top: 24, right: 24, bottom: 24, left: 24 }
-  if (stepIndex >= STEP_MEDITERRANEAN_START && stepIndex <= STEP_MEDITERRANEAN_END) {
+  if (stepIndex >= STEP_MEDITERRANEAN_START) {
     return {
       key: 'mediterranean',
       center: [14, 38],
-      zoom: 4.35,
+      zoom: 4.8,
       duration: STEP_ANIMATION_DURATION_MS,
       padding: cameraPadding,
     }
@@ -401,7 +390,7 @@ function cameraForStep(stepIndex) {
   return {
     key: 'global',
     center: [0, 0],
-    zoom: 1.25,
+    zoom: 1.6,
     duration: STEP_ANIMATION_DURATION_MS,
     padding: cameraPadding,
   }
@@ -442,7 +431,8 @@ onMounted(() => {
     container: mapRef.value,
     style: 'mapbox://styles/mapbox/light-v11',
     center: [0, 0],
-    zoom: 1.5,
+    /* Match the global cameraForStep zoom so the first frame doesn't snap when updateCameraForStep eases. */
+    zoom: 1.6,
     projection: DEFAULT_PROJECTION,
     renderWorldCopies: true,
     /** No default AttributionControl (avoids the compact “i” UI); text links are in the template. */
@@ -494,7 +484,7 @@ onMounted(() => {
         visibility: 'visible',
       },
       paint: {
-        'circle-radius': 7,
+        'circle-radius': 14,
         'circle-color': readColorTunaFarmed(),
         'circle-opacity': 0,
         'circle-stroke-width': 0.5,
@@ -852,8 +842,9 @@ onUnmounted(() => {
 
 .mediterranean-callout {
   left: 52%;
+  /* Tuned visually against the bumped global cameraForStep zoom (1.6) on 1920x1080. */
   top: 30%;
-  width: min(27.2vmin, 344px);
+  width: min(34vmin, 460px);
   aspect-ratio: 427.36 / 170.1;
   transform: translate(-50%, -50%);
 }
@@ -866,7 +857,7 @@ onUnmounted(() => {
 }
 
 .mediterranean-basin-shape path {
-  fill: none;
+  fill: var(--story-annotation-map-stroke);
   stroke: var(--story-annotation-map-stroke);
   stroke-width: var(--story-annotation-map-stroke-width);
 }
