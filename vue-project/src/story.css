@@ -7,6 +7,12 @@
 :root {
   color-scheme: light;
 
+  /*
+   * Presentation scale: keep the laptop layout at 1, then enlarge readable
+   * chrome on full-HD displays where fixed-size text otherwise feels too small.
+   */
+  --story-scale: 1;
+
   /* Font families */
   --font-title: 'Noto Serif JP';
   --font-visual-title: 'Literata', 'Instrument Serif', Georgia, 'Times New Roman', serif;
@@ -21,7 +27,7 @@
   --line-height-body: 1.45;
   --font-weight-body: 400;
   --font-weight-copy: 400;
-  --font-size-copy: 1rem;
+  --font-size-copy: calc(16px * var(--story-scale));
   --font-weight-copy-eyebrow: 600;
   --font-size-copy-eyebrow: 0.8rem;
   --font-weight-copy-title: 400;
@@ -44,6 +50,9 @@
   --font-family-axis-tick: var(--font-copy-ui-visual);
   --font-weight-axis-tick: 200;
   --font-size-axis-tick: 0.8rem;
+  --color-axis-tick: #475569;
+  --color-axis-line: #94a3b8;
+  --viz-axis-line-stroke-width: calc(1px * var(--story-scale));
 
   /* Axis titles — unit / dimension labels on the graphic (not tick numbers) */
   --font-family-axis-title: var(--font-copy-ui-visual);
@@ -88,7 +97,7 @@
   --story-annotation-copy-body: rgba(226, 232, 240, 0.95);
   /* SVG stroke on map overlay ( basin ); falls back to solid frame border luminance via separate token */
   --story-annotation-map-stroke: var(--color-annotation-blue-background);
-  --story-annotation-map-stroke-width: 3.5;
+  --story-annotation-map-stroke-width: calc(3.5 * var(--story-scale));
 
   /*
    * Stacked bars section chart ( TunaStackedBarsVisual SVG ): vertical leader stroke,
@@ -96,7 +105,7 @@
    * label text fill.
    */
   --story-annotation-stacked-bars-stroke: var(--color-annotation-white-background);
-  --story-annotation-stacked-bars-stroke-width: 6;
+  --story-annotation-stacked-bars-stroke-width: calc(6 * var(--story-scale));
   /** Vertical annotation stem opacity (pill uses full opacity unless you tone it down separately). */
   --story-annotation-stacked-bars-flag-line-opacity: 1;
   --story-annotation-stacked-bars-label-font-size: 1.05rem;
@@ -114,10 +123,10 @@
   --step-card-max-width: min(560px, calc(100% - 2rem));
 
   /* D3 chart inner margins (must match drawChart margin.{left,right,bottom} in visuals) */
-  --viz-chart-margin-right: 34px;
-  --viz-chart-margin-bottom: 48px;
+  --viz-chart-margin-right: calc(34px * var(--story-scale));
+  --viz-chart-margin-bottom: calc(48px * var(--story-scale));
   /** Band below stream plot for x-axis (TunaProductionStreamgraphVisual); 0 for bar charts */
-  --viz-x-axis-band: 34px;
+  --viz-x-axis-band: calc(34px * var(--story-scale));
   /** Lift legend bottom edge above the x-axis baseline */
   --viz-legend-above-axis-gap: 0.35rem;
 
@@ -132,12 +141,29 @@
    * TunaStackedBarsVisual + TunaProductionStreamgraphVisual: outer frame height (titles sit above).
    * Single source so both charts match footprint in the layout.
    */
-  --viz-chart-wrap-height: clamp(480px, 88vh, 840px);
-  --viz-chart-wrap-max-height: 840px;
+  --viz-chart-wrap-height: clamp(
+    calc(480px * var(--story-scale)),
+    88vh,
+    calc(840px * var(--story-scale))
+  );
+  --viz-chart-wrap-max-height: calc(840px * var(--story-scale));
+}
+
+@media (min-width: 1600px) and (min-height: 900px) {
+  :root {
+    --story-scale: 1.2;
+  }
+}
+
+@media (min-width: 1900px) and (min-height: 1000px) {
+  :root {
+    --story-scale: 1.32;
+  }
 }
 
 @media (max-width: 900px) {
   :root {
+    --story-scale: 1;
     --viz-chart-wrap-height: clamp(360px, 72vh, 640px);
     --viz-chart-wrap-max-height: 640px;
   }
@@ -215,6 +241,29 @@ a {
 .visual-title--on-dark {
   color: #f8fafc;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.story-chart-axis {
+  pointer-events: none;
+}
+
+.story-chart-axis text {
+  fill: var(--color-axis-tick);
+  font-size: var(--font-size-axis-tick);
+  font-family: var(--font-family-axis-tick);
+  font-weight: var(--font-weight-axis-tick);
+}
+
+.story-chart-axis path,
+.story-chart-axis line {
+  stroke: var(--color-axis-line);
+  stroke-width: var(--viz-axis-line-stroke-width);
+}
+
+.story-chart-axis-label {
+  font-size: var(--font-size-axis-title);
+  font-family: var(--font-family-axis-title);
+  font-weight: var(--font-weight-axis-title);
 }
 
 .visual-graph-type {

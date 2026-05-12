@@ -33,6 +33,7 @@ const prefersReducedMotion = ref(false)
 /** Title opacity ramps with scroll; hits 1 at TITLE_FADE_END_RAW (before scrollRaw === 1). */
 const TITLE_FADE_START_RAW = 0.48
 const TITLE_FADE_END_RAW = 0.82
+const VISUAL_DIM_TARGET_OPACITY = 0.4
 
 function clamp01(x) {
   return Math.min(1, Math.max(0, x))
@@ -45,6 +46,10 @@ const titleOpacity = computed(() =>
         (scrollRaw.value - TITLE_FADE_START_RAW) /
           (TITLE_FADE_END_RAW - TITLE_FADE_START_RAW),
       ),
+)
+
+const visualOpacity = computed(
+  () => 1 - titleOpacity.value * (1 - VISUAL_DIM_TARGET_OPACITY),
 )
 
 const titleAriaHidden = computed(() =>
@@ -100,7 +105,7 @@ onUnmounted(() => {
     <StorySection id="ending" height="auto" width="full" background="#13265f">
       <div ref="scrollerEl" class="ending-scroller">
         <div class="ending-shell">
-          <div class="ending-grid">
+          <div class="ending-grid" :style="{ opacity: visualOpacity }">
             <div v-for="(col, index) in columns" :key="index" class="ending-col">
               <div class="ending-col-stack">
                 <img class="ending-col-img" :src="col.src" :alt="col.alt" />
@@ -200,11 +205,6 @@ onUnmounted(() => {
   letter-spacing: -0.02em;
   line-height: 1;
   color: #ffffff;
-  text-shadow:
-    0 0 2px #000,
-    0 0 4px rgba(0, 0, 0, 0.8),
-    0 4px 12px rgba(0, 0, 0, 0.6),
-    0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 /* Same pattern as .intro-title-inner: one flex child, normal inline layout inside. */

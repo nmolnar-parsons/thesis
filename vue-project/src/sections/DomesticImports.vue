@@ -14,7 +14,7 @@ defineProps({
 
 <template>
   <StorySection id="domestic-imports" height="min-screen" width="full">
-    <SectionGrid :columns="12" gap="1.25rem" align="start">
+    <SectionGrid class="domestic-imports-grid" :columns="12" gap="1.25rem" align="start">
       <div v-if="!minimalMode" class="story-copy domestic-copy">
         <CopyBlock title="Where is your tuna coming from?">
           <p>
@@ -32,6 +32,11 @@ defineProps({
 <style scoped>
 .domestic-copy {
   grid-column: 3 / span 8;
+}
+
+.domestic-imports-grid {
+  min-height: 100vh;
+  align-items: center;
 }
 
 .domestic-visual {

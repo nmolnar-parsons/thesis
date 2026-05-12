@@ -11,6 +11,8 @@ import { onMounted, onUnmounted, nextTick, ref } from 'vue'
 import aquaCsvRaw from '../data/bluefin_aquaculture.csv?raw'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
 import { readColorDefaultBlue, readColorTunaFarmed } from '../utils/readStoryColors.js'
+import { readStoryScale } from '../utils/readStoryScale.js'
+import { BLUEFIN_YEAR_AXIS_TICKS, formatYearTick } from './chartAxisConfig.js'
 
 const compactNumber = d3Format('~s')
 function formatTickShort(d) {
@@ -42,6 +44,9 @@ const SERIES_LABELS = {
 const X_AXIS_BAND = 34
 /** Fixed y-scale (tonnes), matched with TunaStackedBarsVisual. */
 const Y_AXIS_MAX = 120_000
+const Y_AXIS_LABEL = 'Global Bluefin Catch (tonnes)'
+const Y_AXIS_TICK_PADDING = 10
+const Y_AXIS_TICK_SIZE = 6
 
 function parseAquacultureRowsForYears(years) {
   const rows = csvParse(aquaCsvRaw, (d) => ({
@@ -127,27 +132,76 @@ function drawChart() {
   const width = host.clientWidth || 800
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
-  const margin = { top: 48, right: 34, bottom: 48, left: 84 }
-  const innerWidth = width - margin.left - margin.right
-  const innerH = height - margin.top - margin.bottom
-  if (innerWidth < 20 || innerH < X_AXIS_BAND + 40) return
+  const storyScale = readStoryScale(wrapRef.value ?? host)
+  const scalePx = (value) => value * storyScale
+  const baseMargin = {
+    top: scalePx(48),
+    right: scalePx(34),
+    bottom: scalePx(48),
+    left: scalePx(84),
+  }
+  const innerH = height - baseMargin.top - baseMargin.bottom
+  const xAxisBand = scalePx(X_AXIS_BAND)
+  if (innerH < xAxisBand + scalePx(40)) return
 
   /** Stream area only; x-axis sits at y = chartHeight (matches innerH − band, same pattern as TunaStackedBarsVisual inner plot). */
-  const chartHeight = innerH - X_AXIS_BAND
+  const chartHeight = innerH - xAxisBand
 
   svg.attr('width', width).attr('height', height)
   svg.selectAll('*').remove()
 
+  const yScaleTop = scaleLinear().domain([0, Y_AXIS_MAX]).range([chartHeight, 0])
+  const yAxisTop = () =>
+    axisLeft(yScaleTop)
+      .ticks(4)
+      .tickSizeInner(scalePx(Y_AXIS_TICK_SIZE))
+      .tickPadding(scalePx(Y_AXIS_TICK_PADDING))
+      .tickFormat(formatTickShort)
+
+  const measureLayer = svg
+    .append('g')
+    .attr('class', 'axis-measure')
+    .attr('visibility', 'hidden')
+    .attr('aria-hidden', 'true')
+  const measureYAxis = measureLayer
+    .append('g')
+    .attr('class', 'story-chart-axis axis axis-y')
+    .call(yAxisTop())
+  const maxTickLabelWidth = Math.max(
+    0,
+    ...measureYAxis
+      .selectAll('.tick text')
+      .nodes()
+      .map((node) => node.getBBox().width),
+  )
+  const axisLabelThickness =
+    measureLayer
+      .append('text')
+      .attr('class', 'story-chart-axis-label axis-label')
+      .text(Y_AXIS_LABEL)
+      .node()
+      ?.getBBox().height || 16
+  measureLayer.remove()
+
+  const axisGapTarget = baseMargin.right
+  const tickTextOffset = scalePx(Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING)
+  const labelToTickGap = axisGapTarget / 2
+  const labelCenterFromLeftEdge = axisGapTarget + axisLabelThickness / 2
+  const tickLabelsLeftEdge = axisGapTarget + axisLabelThickness + labelToTickGap
+  const margin = {
+    ...baseMargin,
+    left: Math.ceil(tickLabelsLeftEdge + tickTextOffset + maxTickLabelWidth),
+  }
+  const innerWidth = width - margin.left - margin.right
+  if (innerWidth < 20) return
+
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
   const gTop = g.append('g').attr('class', 'panel-top')
-  const gAxisX = g.append('g').attr('class', 'axis axis-x')
-
-
+  const gAxisX = g.append('g').attr('class', 'story-chart-axis axis axis-x')
 
   const xScale = scaleLinear().domain([YEAR_START, YEAR_END]).range([0, innerWidth])
   const aquaStackGen = stack().keys(SERIES_KEYS)
   const aquaLayers = aquaStackGen(streamRows)
-  const yScaleTop = scaleLinear().domain([0, Y_AXIS_MAX]).range([chartHeight, 0])
   const getAquaFill = (key) => (key === 'CAPTURE' ? readColorDefaultBlue() : readColorTunaFarmed())
 
   const areaTop = area()
@@ -157,8 +211,8 @@ function drawChart() {
     .y1((point) => yScaleTop(point[1]))
 
   const lineEndY = chartHeight
-  const hoverLabelY = 12
-  const hoverLineStartY = hoverLabelY + 6
+  const hoverLabelY = scalePx(12)
+  const hoverLineStartY = hoverLabelY + scalePx(6)
 
   const hoverLine = g
     .append('line')
@@ -221,8 +275,8 @@ function drawChart() {
     const label = SERIES_LABELS[series.key] || series.key
     tooltipEl.innerHTML = `<div class="country">${label}</div><div>${clampedYear}: ${pct.toFixed(1)}% (${tonnes.toLocaleString(undefined, { maximumFractionDigits: 0 })} tonnes)</div>`
     tooltipEl.style.opacity = '1'
-    tooltipEl.style.left = `${event.offsetX + 14}px`
-    tooltipEl.style.top = `${event.offsetY + 14}px`
+    tooltipEl.style.left = `${event.offsetX + scalePx(14)}px`
+    tooltipEl.style.top = `${event.offsetY + scalePx(14)}px`
   }
 
   gTop
@@ -250,26 +304,22 @@ function drawChart() {
     })
 
   gAxisX.attr('transform', `translate(0,${chartHeight})`).call(
-    axisBottom(xScale).tickFormat((d) => Number(d).toString()),
+    axisBottom(xScale).tickValues(BLUEFIN_YEAR_AXIS_TICKS).tickFormat(formatYearTick),
   )
 
-  gTop.append('g').attr('class', 'axis axis-y').call(
-    axisLeft(yScaleTop)
-      .ticks(4)
-      .tickPadding(10)
-      .tickFormat(formatTickShort),
-  )
+  gTop.append('g').attr('class', 'story-chart-axis axis axis-y').call(yAxisTop())
 
   gTop
     .append('text')
-    .attr('class', 'axis-label')
+    .attr('class', 'story-chart-axis-label axis-label')
     .attr('text-anchor', 'middle')
-    .attr('transform', 'rotate(-90)')
-    .attr('y', -54)
-    .attr('x', -chartHeight / 2)
-    .attr('dy', '.32em')
+    .attr(
+      'transform',
+      `translate(${labelCenterFromLeftEdge - margin.left}, ${chartHeight / 2}) rotate(-90)`,
+    )
+    .attr('dominant-baseline', 'middle')
     .attr('fill', '#334155')
-    .text('Catch (tonnes)')
+    .text(Y_AXIS_LABEL)
 
   hoverLine.raise()
   hoverLabel.raise()
@@ -345,9 +395,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  /* Local override: take more of the viewport on 1920x1080 without touching the shared --viz-chart-wrap-* tokens (StackedBars stays as-is). */
-  height: clamp(480px, 92vh, 1040px);
-  max-height: 1040px;
+  height: var(--viz-chart-wrap-height);
+  max-height: var(--viz-chart-wrap-max-height);
   overflow: hidden;
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);
@@ -374,7 +423,7 @@ onUnmounted(() => {
   );
   z-index: 7;
   width: auto;
-  max-width: min(280px, 46vw);
+  max-width: min(calc(280px * var(--story-scale)), 46vw);
   overflow: auto;
   padding: var(--viz-legend-padding);
   border: var(--viz-legend-border);
@@ -436,28 +485,6 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.streamgraph-wrap :deep(.axis text) {
-  fill: #475569;
-  font-size: var(--font-size-axis-tick);
-  font-family: var(--font-family-axis-tick);
-  font-weight: var(--font-weight-axis-tick);
-}
-
-.streamgraph-wrap :deep(.axis-label) {
-  font-size: var(--font-size-axis-title);
-  font-family: var(--font-family-axis-title);
-  font-weight: var(--font-weight-axis-title);
-}
-
-.streamgraph-wrap :deep(.axis path),
-.streamgraph-wrap :deep(.axis line) {
-  stroke: #94a3b8;
-}
-
-.streamgraph-wrap :deep(.axis) {
-  pointer-events: none;
-}
-
 .streamgraph-wrap :deep(.stream) {
   fill-opacity: 0.88;
   transition: fill-opacity 0.2s ease;
@@ -474,7 +501,7 @@ onUnmounted(() => {
 
 .streamgraph-wrap :deep(.hover-line) {
   stroke: #334155;
-  stroke-width: 2;
+  stroke-width: calc(2px * var(--story-scale));
   stroke-dasharray: 6 4;
   pointer-events: none;
 }

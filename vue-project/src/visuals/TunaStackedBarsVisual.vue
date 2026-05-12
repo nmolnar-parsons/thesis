@@ -7,6 +7,8 @@ import { transition } from 'd3-transition'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import csvRaw from '../data/GTA_FIRMs_tuna_cleaned_grouped.csv?raw'
 import { readColorDefaultBlue } from '../utils/readStoryColors.js'
+import { readStoryScale } from '../utils/readStoryScale.js'
+import { BLUEFIN_YEAR_AXIS_TICKS, formatYearTick } from './chartAxisConfig.js'
 
 const compactNumber = d3Format('~s')
 function formatTickShort(d) {
@@ -30,6 +32,9 @@ const BLUEFIN_SPECIES = [BLUEFIN_CODE]
 const STAGGER_MS = 52
 /** Fixed y-scale (tonnes), matched with TunaProductionStreamgraphVisual. */
 const Y_AXIS_MAX = 120_000
+const Y_AXIS_LABEL = 'Global Bluefin Catch (tonnes)'
+const Y_AXIS_TICK_PADDING = 10
+const Y_AXIS_TICK_SIZE = 6
 
 /** Toggle single-line authoring inputs merged into SVG annotation labels while tuning copy. */
 const SHOW_ANNOTATION_TEXT_INPUT = false
@@ -58,7 +63,9 @@ function readStackedBarsAnnotationPaint(rootEl) {
     cs.getPropertyValue('--story-annotation-stacked-bars-stroke').trim() || DEFAULT_STACKED_BARS_ANNO_STROKE
   const wRaw = cs.getPropertyValue('--story-annotation-stacked-bars-stroke-width').trim() || ''
   let strokeWidth = parseFloat(wRaw)
-  if (!Number.isFinite(strokeWidth)) strokeWidth = DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH
+  if (!Number.isFinite(strokeWidth)) {
+    strokeWidth = DEFAULT_STACKED_BARS_ANNO_STROKE_WIDTH * readStoryScale(scope)
+  }
   return { stroke, strokeWidth }
 }
 
@@ -296,10 +303,6 @@ function yearsWithinRange(years, yearRange) {
   return years.filter((y) => y >= start && y <= end)
 }
 
-function xTickYearsDecadal(years) {
-  return years.filter((y) => (y - YEAR_START) % 10 === 0)
-}
-
 function yearCenterX(xScale, year) {
   const x = xScale(String(year))
   if (x == null) return null
@@ -382,10 +385,16 @@ function drawChart() {
   const width = el.clientWidth || 800
   const height = el.clientHeight || 480
   if (width < 20 || height < 20) return
-  const margin = { top: 48, right: 34, bottom: 48, left: 84 }
-  const innerW = width - margin.left - margin.right
-  const innerH = height - margin.top - margin.bottom
-  if (innerW < 20 || innerH < 20) return
+  const storyScale = readStoryScale(wrapRef.value ?? el)
+  const scalePx = (value) => value * storyScale
+  const baseMargin = {
+    top: scalePx(48),
+    right: scalePx(34),
+    bottom: scalePx(48),
+    left: scalePx(84),
+  }
+  const innerH = height - baseMargin.top - baseMargin.bottom
+  if (innerH < 20) return
 
   svg.attr('width', width).attr('height', height)
 
@@ -397,8 +406,52 @@ function drawChart() {
   const stageYears = stageIdx >= 0 ? yearsWithinRange(years, stage.yearRange) : []
   const isFinal = stageIdx === LAST_STAGE_INDEX
 
-  const xScale = scaleBand().domain(years.map(String)).range([0, innerW]).padding(0.15)
   const yScale = scaleLinear().domain([0, Y_AXIS_MAX]).range([innerH, 0])
+  const yAxisFn = axisLeft(yScale)
+    .ticks(6)
+    .tickSizeInner(scalePx(Y_AXIS_TICK_SIZE))
+    .tickPadding(scalePx(Y_AXIS_TICK_PADDING))
+    .tickFormat(formatTickShort)
+    .tickSizeOuter(0)
+
+  const measureLayer = svg
+    .append('g')
+    .attr('class', 'axis-measure')
+    .attr('visibility', 'hidden')
+    .attr('aria-hidden', 'true')
+  const measureYAxis = measureLayer
+    .append('g')
+    .attr('class', 'story-chart-axis y-axis axis')
+    .call(yAxisFn)
+  const maxTickLabelWidth = Math.max(
+    0,
+    ...measureYAxis
+      .selectAll('.tick text')
+      .nodes()
+      .map((node) => node.getBBox().width),
+  )
+  const axisLabelThickness =
+    measureLayer
+      .append('text')
+      .attr('class', 'story-chart-axis-label y-axis-label')
+      .text(Y_AXIS_LABEL)
+      .node()
+      ?.getBBox().height || 16
+  measureLayer.remove()
+
+  const axisGapTarget = baseMargin.right
+  const tickTextOffset = scalePx(Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING)
+  const labelToTickGap = axisGapTarget / 2
+  const labelCenterFromLeftEdge = axisGapTarget + axisLabelThickness / 2
+  const tickLabelsLeftEdge = axisGapTarget + axisLabelThickness + labelToTickGap
+  const margin = {
+    ...baseMargin,
+    left: Math.ceil(tickLabelsLeftEdge + tickTextOffset + maxTickLabelWidth),
+  }
+  const innerW = width - margin.left - margin.right
+  if (innerW < 20) return
+
+  const xScale = scaleBand().domain(years.map(String)).range([0, innerW]).padding(0.15)
 
   const segs = stageIdx >= 0 ? segmentGeometry(stageYears, order, bySy) : []
 
@@ -475,9 +528,9 @@ function drawChart() {
   let gMain = svg.select('g.main')
   if (gMain.empty()) {
     gMain = svg.append('g').attr('class', 'main')
-    gMain.append('g').attr('class', 'x-axis axis')
-    gMain.append('g').attr('class', 'y-axis axis')
-    gMain.append('text').attr('class', 'y-axis-label')
+    gMain.append('g').attr('class', 'story-chart-axis x-axis axis')
+    gMain.append('g').attr('class', 'story-chart-axis y-axis axis')
+    gMain.append('text').attr('class', 'story-chart-axis-label y-axis-label')
     gMain.append('g').attr('class', 'hover-guides')
     gMain.append('g').attr('class', 'bars')
     gMain.append('g').attr('class', 'hover-targets')
@@ -486,30 +539,26 @@ function drawChart() {
   gMain.attr('transform', `translate(${margin.left},${margin.top})`)
 
   const gx = gMain.select('g.x-axis')
-  const decadeTicks = xTickYearsDecadal(years).map(String)
+  const yearTicks = BLUEFIN_YEAR_AXIS_TICKS.map(String).filter((year) => years.includes(Number(year)))
   gx.attr('transform', `translate(0,${innerH})`).call(
-    axisBottom(xScale).tickValues(decadeTicks).tickSizeOuter(0),
+    axisBottom(xScale).tickValues(yearTicks).tickFormat(formatYearTick),
   )
   gx.selectAll('text').attr('transform', null).style('text-anchor', 'middle')
 
   const gy = gMain.select('g.y-axis')
-  const yAxisFn = axisLeft(yScale)
-    .ticks(6)
-    .tickPadding(10)
-    .tickFormat(formatTickShort)
-    .tickSizeOuter(0)
   if (introPrimed.value && stepChanged) {
     gy.transition(t).call(yAxisFn)
   } else {
     gy.call(yAxisFn)
   }
 
-  gMain
+  const yAxisLabel = gMain
     .select('text.y-axis-label')
     .attr('text-anchor', 'middle')
-    .attr('transform', `translate(${-54}, ${innerH / 2}) rotate(-90)`)
+    .attr('transform', `translate(${labelCenterFromLeftEdge - margin.left}, ${innerH / 2}) rotate(-90)`)
+    .attr('dominant-baseline', 'middle')
     .attr('fill', '#334155')
-    .text('global tuna catch (tonnes)')
+    .text(Y_AXIS_LABEL)
 
   const gHoverGuides = gMain.select('g.hover-guides')
   const gBars = gMain.select('g.bars')
@@ -547,7 +596,7 @@ function drawChart() {
     .attr('class', 'hover-line-label')
     .attr('text-anchor', 'middle')
     .attr('x', 0)
-    .attr('y', -5)
+    .attr('y', scalePx(-5))
     .style('opacity', 0)
 
   function hideHoverState() {
@@ -652,7 +701,7 @@ function drawChart() {
     priorStageIdx < FIRST_ANNOTATION_STAGE_IDX
 
   /** Slide annotation line + label in from chart-left on first annotated stage only. */
-  const annoFlyDx = innerW + 160
+  const annoFlyDx = innerW + scalePx(160)
 
   // Remove legacy annotation classes so old mark types do not persist.
   gAnnotations
@@ -661,8 +710,8 @@ function drawChart() {
     )
     .remove()
 
-  const labelPadX = 6
-  const labelPadY = 5
+  const labelPadX = scalePx(6)
+  const labelPadY = scalePx(5)
   const stackedAnnoPaint = readStackedBarsAnnotationPaint(el)
   const annoPillChromeStroke = readAnnotationPillBackdropChromeStroke(el)
 
@@ -695,7 +744,7 @@ function drawChart() {
   labelGs.select('text.annotation-flag-label')
     .attr('text-anchor', 'end')
     .attr('dominant-baseline', 'text-before-edge')
-    .attr('x', -ANNO_LABEL_LINE_GAP_PX)
+    .attr('x', -scalePx(ANNO_LABEL_LINE_GAP_PX))
     .attr('y', labelPadY)
     .text((d) => String(d.label ?? '').trim())
 
@@ -923,12 +972,12 @@ onUnmounted(() => {
 .stacked-wrap :deep(.bar-segment.is-hovered) {
   opacity: 1 !important;
   stroke: rgba(15, 23, 42, 0.35);
-  stroke-width: 0.8;
+  stroke-width: calc(0.8px * var(--story-scale));
 }
 
 .stacked-wrap :deep(.hover-line) {
   stroke: #334155;
-  stroke-width: 2;
+  stroke-width: calc(2px * var(--story-scale));
   stroke-dasharray: 6 4;
   pointer-events: none;
 }
@@ -951,7 +1000,7 @@ onUnmounted(() => {
   bottom: calc(var(--viz-chart-margin-bottom) + var(--viz-legend-above-axis-gap));
   z-index: 6;
   width: auto;
-  max-width: min(280px, 46vw);
+  max-width: min(calc(280px * var(--story-scale)), 46vw);
   overflow: auto;
   padding: var(--viz-legend-padding);
   border: var(--viz-legend-border);
@@ -973,23 +1022,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   padding: 0.04rem 0.05rem;
-  font-size: var(--font-size-ui);
+  font-size: var(--font-size-axis-title);
   font-family: inherit;
   color: #0f172a;
   line-height: var(--viz-legend-line-height);
-}
-
-.stacked-wrap :deep(.axis text) {
-  fill: #475569;
-  font-size: var(--font-size-axis-tick);
-  font-family: var(--font-family-axis-tick);
-  font-weight: var(--font-weight-axis-tick);
-}
-
-.stacked-wrap :deep(.y-axis-label) {
-  font-size: var(--font-size-axis-title);
-  font-family: var(--font-family-axis-title);
-  font-weight: var(--font-weight-axis-title);
 }
 
 .stacked-wrap :deep(.annotation-flag-label-wrap) {
@@ -1007,21 +1043,16 @@ onUnmounted(() => {
 }
 
 .stacked-wrap :deep(.annotation-flag-label) {
-  font-size: var(--story-annotation-stacked-bars-label-font-size);
+  font-size: var(--font-size-axis-title);
   font-family: var(--font-family-axis-tick);
   font-weight: var(--font-weight-axis-tick);
   fill: var(--story-annotation-stacked-bars-label-fill);
 }
 
-.stacked-wrap :deep(.axis path),
-.stacked-wrap :deep(.axis line) {
-  stroke: #94a3b8;
-}
-
 .swatch {
   width: 1rem;
   height: 0;
-  border-top: 3px solid var(--swatch-color);
+  border-top: calc(3px * var(--story-scale)) solid var(--swatch-color);
   border-top-style: solid;
   border-radius: 2px;
   background: transparent;

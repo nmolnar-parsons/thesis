@@ -33,6 +33,7 @@ const prefersReducedMotion = ref(false)
 /** Title opacity ramps with scroll; hits 1 at TITLE_FADE_END_RAW (before scrollRaw === 1). */
 const TITLE_FADE_START_RAW = 0.48
 const TITLE_FADE_END_RAW = 0.82
+const VISUAL_DIM_TARGET_OPACITY = 0.4
 
 function clamp01(x) {
   return Math.min(1, Math.max(0, x))
@@ -45,6 +46,10 @@ const titleOpacity = computed(() =>
         (scrollRaw.value - TITLE_FADE_START_RAW) /
           (TITLE_FADE_END_RAW - TITLE_FADE_START_RAW),
       ),
+)
+
+const visualOpacity = computed(
+  () => 1 - titleOpacity.value * (1 - VISUAL_DIM_TARGET_OPACITY),
 )
 
 const titleAriaHidden = computed(() =>
@@ -100,7 +105,7 @@ onUnmounted(() => {
     <StorySection id="intro" height="auto" width="full" background="#041b46">
       <div ref="scrollerEl" class="intro-scroller">
         <div class="intro-shell">
-          <div class="intro-grid">
+          <div class="intro-grid" :style="{ opacity: visualOpacity }">
             <div v-for="(col, index) in columns" :key="index" class="intro-col">
               <div class="intro-col-stack">
                 <img class="intro-col-img" :src="col.src" :alt="col.alt" />
@@ -199,11 +204,6 @@ onUnmounted(() => {
   line-height: 1;
   color: #ffffff;
   /* -webkit-text-stroke: 1px rgba(0, 0, 0, 0.95); */
-  text-shadow:
-    0 0 2px #000,
-    0 0 4px rgba(0, 0, 0, 0.8),
-    0 4px 12px rgba(0, 0, 0, 0.6),
-    0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 /* One flex item so line breaks and letter-spacing match plain centered text. */

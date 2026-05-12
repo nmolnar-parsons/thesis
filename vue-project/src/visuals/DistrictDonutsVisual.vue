@@ -1,8 +1,9 @@
 <script setup>
 import { arc, pie } from 'd3-shape'
 import { csvParse } from 'd3-dsv'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import csvRaw from '../data/tuna_imports_usa_customs.csv?raw'
+import { readStoryScale } from '../utils/readStoryScale.js'
 import {
   CONTINENT_ORDER,
   buildCountryColorMapForSubset,
@@ -13,34 +14,30 @@ import {
 const YEAR_TARGET = 2025
 const BLUEFIN_PRODUCT = 'Tuna Bluefin Fresh'
 const MIN_DISTRICT_TONNES = 10
-const GRID_OUTER_RADIUS = 44
-const GRID_INNER_RADIUS = 24
-const GRID_SVG_SIZE = 108
-const GRID_CENTER = GRID_SVG_SIZE / 2
+const GRID_OUTER_RADIUS = 40
+const GRID_INNER_RADIUS = 22
+const GRID_SVG_SIZE = 97
 
-const SINGLE_OUTER_RADIUS = 152
-const SINGLE_INNER_RADIUS = 84
-const SINGLE_SVG_SIZE = 640
-const SINGLE_CENTER = SINGLE_SVG_SIZE / 2
+const SINGLE_OUTER_RADIUS = 137
+const SINGLE_INNER_RADIUS = 76
+const SINGLE_SVG_SIZE = 576
 
 /** Radial bump from arc, then one straight segment to label (single bend). Donut-centered coords. */
-const CALLOUT_RADIAL_BUMP = 30
+const CALLOUT_RADIAL_BUMP = 27
 /** How far out labels sit from donut edge along slice direction */
-const CALLOUT_LABEL_RADIUS = SINGLE_OUTER_RADIUS + 50
-const CALLOUT_DOT_R = 5.5
-const CALLOUT_TEXT_GAP = 14
-const CALLOUT_VERTICAL_GAP = 28
+const CALLOUT_LABEL_RADIUS = SINGLE_OUTER_RADIUS + 45
+const CALLOUT_DOT_R = 5
+const CALLOUT_TEXT_GAP = 13
+const CALLOUT_VERTICAL_GAP = 25
 const CALLOUT_REVEAL_DURATION_MS = 440
 /** Same radial offset above/below y=0: label dots sit on ±(outer+bump+pad) from donut center */
-const CALLOUT_AXIS_PAD = 26
-const TOP_CALLOUT_ANCHOR_Y = -(SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP + CALLOUT_AXIS_PAD)
-const BOTTOM_CALLOUT_ANCHOR_Y = SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP + CALLOUT_AXIS_PAD
-const CALLOUT_VERTICAL_BAND = BOTTOM_CALLOUT_ANCHOR_Y - TOP_CALLOUT_ANCHOR_Y
+const CALLOUT_AXIS_PAD = 23
 
 const NYC_DISTRICT_KEY = 'New York, NY'
 
 const hoveredCountry = ref('')
 const selectedKey = ref(NYC_DISTRICT_KEY)
+const visualScale = ref(1)
 
 const tooltip = ref({
   visible: false,
@@ -80,11 +77,42 @@ const pieGenerator = pie()
   })
   .value((d) => d.tonnes)
 
-const arcGeneratorGrid = arc().innerRadius(GRID_INNER_RADIUS).outerRadius(GRID_OUTER_RADIUS)
-const arcGeneratorSingle = arc().innerRadius(SINGLE_INNER_RADIUS).outerRadius(SINGLE_OUTER_RADIUS)
-const outerArcGeneratorSingle = arc()
-  .innerRadius(SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP)
-  .outerRadius(SINGLE_OUTER_RADIUS + CALLOUT_RADIAL_BUMP)
+const donutGeometry = computed(() => {
+  const scale = visualScale.value
+  const singleOuterRadius = SINGLE_OUTER_RADIUS * scale
+  const singleInnerRadius = SINGLE_INNER_RADIUS * scale
+  const calloutRadialBump = CALLOUT_RADIAL_BUMP * scale
+  const calloutAxisPad = CALLOUT_AXIS_PAD * scale
+  const topCalloutAnchorY = -(singleOuterRadius + calloutRadialBump + calloutAxisPad)
+  const bottomCalloutAnchorY = singleOuterRadius + calloutRadialBump + calloutAxisPad
+
+  return {
+    gridSvgSize: GRID_SVG_SIZE * scale,
+    gridCenter: (GRID_SVG_SIZE * scale) / 2,
+    singleSvgSize: SINGLE_SVG_SIZE * scale,
+    singleCenter: (SINGLE_SVG_SIZE * scale) / 2,
+    singleOuterRadius,
+    calloutLabelRadius: CALLOUT_LABEL_RADIUS * scale,
+    calloutDotR: CALLOUT_DOT_R * scale,
+    calloutTextGap: CALLOUT_TEXT_GAP * scale,
+    calloutVerticalGap: CALLOUT_VERTICAL_GAP * scale,
+    topCalloutAnchorY,
+    bottomCalloutAnchorY,
+    calloutVerticalBand: bottomCalloutAnchorY - topCalloutAnchorY,
+    arcGeneratorGrid: arc()
+      .innerRadius(GRID_INNER_RADIUS * scale)
+      .outerRadius(GRID_OUTER_RADIUS * scale),
+    arcGeneratorSingle: arc()
+      .innerRadius(singleInnerRadius)
+      .outerRadius(singleOuterRadius),
+    outerArcGeneratorSingle: arc()
+      .innerRadius(singleOuterRadius + calloutRadialBump)
+      .outerRadius(singleOuterRadius + calloutRadialBump),
+  }
+})
+
+const arcGeneratorGrid = computed(() => donutGeometry.value.arcGeneratorGrid)
+const arcGeneratorSingle = computed(() => donutGeometry.value.arcGeneratorSingle)
 
 function chartFromDistrictEntry(districtEntry) {
   const segments = Array.from(districtEntry.countries.entries())
@@ -173,6 +201,10 @@ const calloutReveal = ref(1)
 const pendingDonutCalloutReveal = ref(false)
 let calloutRafId = 0
 
+function syncVisualScale() {
+  visualScale.value = readStoryScale(document.documentElement)
+}
+
 function cancelCalloutReveal() {
   if (calloutRafId) {
     cancelAnimationFrame(calloutRafId)
@@ -225,8 +257,14 @@ function onDonutArcsAfterEnter() {
   startCalloutReveal()
 }
 
+onMounted(() => {
+  syncVisualScale()
+  window.addEventListener('resize', syncVisualScale)
+})
+
 onBeforeUnmount(() => {
   cancelCalloutReveal()
+  window.removeEventListener('resize', syncVisualScale)
 })
 
 function midAngle(arcDatum) {
@@ -235,24 +273,25 @@ function midAngle(arcDatum) {
 
 /** Observable-style callout geometry: arc centroid -> outerArc centroid -> side anchor. */
 function calloutForArc(arcDatum, arcGen, outerArcGen) {
+  const geom = donutGeometry.value
   const [cx, cy] = arcGen.centroid(arcDatum)
   const clen = Math.hypot(cx, cy) || 1
-  const ax = (cx / clen) * SINGLE_OUTER_RADIUS
-  const ay = (cy / clen) * SINGLE_OUTER_RADIUS
+  const ax = (cx / clen) * geom.singleOuterRadius
+  const ay = (cy / clen) * geom.singleOuterRadius
   const [bxRaw, byRaw] = outerArcGen.centroid(arcDatum)
   const side = midAngle(arcDatum) < Math.PI ? 1 : -1
-  const dotX = CALLOUT_LABEL_RADIUS * side
+  const dotX = geom.calloutLabelRadius * side
   const dotY = byRaw
   const by = dotY
   const bx = bxRaw
-  const textX = dotX + side * (CALLOUT_DOT_R + CALLOUT_TEXT_GAP)
+  const textX = dotX + side * (geom.calloutDotR + geom.calloutTextGap)
   const textY = dotY
 
   return {
     country: arcDatum.data.country,
     color: colorForCountry(arcDatum.data.country),
     side,
-    dotR: CALLOUT_DOT_R,
+    dotR: geom.calloutDotR,
     ax,
     ay,
     bx,
@@ -268,6 +307,7 @@ function calloutForArc(arcDatum, arcGen, outerArcGen) {
 }
 
 function applyVerticalPadding(rows) {
+  const calloutVerticalGap = donutGeometry.value.calloutVerticalGap
   const out = rows.map((r) => ({ ...r }))
   for (const side of [-1, 1]) {
     const sideRows = out
@@ -279,16 +319,16 @@ function applyVerticalPadding(rows) {
     for (let i = 1; i < sideRows.length; i += 1) {
       const prev = sideRows[i - 1]
       const curr = sideRows[i]
-      if (curr.dotY - prev.dotY < CALLOUT_VERTICAL_GAP) {
-        curr.dotY = prev.dotY + CALLOUT_VERTICAL_GAP
+      if (curr.dotY - prev.dotY < calloutVerticalGap) {
+        curr.dotY = prev.dotY + calloutVerticalGap
       }
     }
 
     for (let i = sideRows.length - 2; i >= 0; i -= 1) {
       const next = sideRows[i + 1]
       const curr = sideRows[i]
-      if (next.dotY - curr.dotY < CALLOUT_VERTICAL_GAP) {
-        curr.dotY = next.dotY - CALLOUT_VERTICAL_GAP
+      if (next.dotY - curr.dotY < calloutVerticalGap) {
+        curr.dotY = next.dotY - calloutVerticalGap
       }
     }
 
@@ -355,12 +395,13 @@ function scaleCalloutRowsToVerticalBand(rows, band) {
  */
 function pinCalloutsInVerticalBand(rows) {
   if (!rows.length) return rows
+  const geom = donutGeometry.value
   const out = rows.map((r) => ({ ...r }))
   const globalMin = Math.min(...out.map((r) => r.dotY))
   const globalMax = Math.max(...out.map((r) => r.dotY))
-  let pinShift = BOTTOM_CALLOUT_ANCHOR_Y - globalMax
-  if (globalMin + pinShift < TOP_CALLOUT_ANCHOR_Y) {
-    pinShift = TOP_CALLOUT_ANCHOR_Y - globalMin
+  let pinShift = geom.bottomCalloutAnchorY - globalMax
+  if (globalMin + pinShift < geom.topCalloutAnchorY) {
+    pinShift = geom.topCalloutAnchorY - globalMin
   }
   if (Math.abs(pinShift) > 1e-6) {
     for (const r of out) shiftCalloutRowY(r, pinShift)
@@ -384,12 +425,16 @@ function measurePolylineLength(pointsStr) {
 function buildPackedCallouts(chart) {
   if (!chart?.arcs?.length) return []
   const packed = chart.arcs.map((arcDatum) => ({
-    ...calloutForArc(arcDatum, arcGeneratorSingle, outerArcGeneratorSingle),
+    ...calloutForArc(
+      arcDatum,
+      donutGeometry.value.arcGeneratorSingle,
+      donutGeometry.value.outerArcGeneratorSingle,
+    ),
     segment: arcDatum.data,
   }))
   let out = applyVerticalPadding(packed)
   out = alignLeftRightTopHemisphereCalloutTops(out)
-  out = scaleCalloutRowsToVerticalBand(out, CALLOUT_VERTICAL_BAND)
+  out = scaleCalloutRowsToVerticalBand(out, donutGeometry.value.calloutVerticalBand)
   out = pinCalloutsInVerticalBand(out)
   for (const r of out) {
     r.lineLength = measurePolylineLength(r.polylinePoints)
@@ -403,15 +448,20 @@ const singleDonutCallouts = computed(() => {
   return buildPackedCallouts(district)
 })
 const centerTooltipCountry = computed(() =>
-  tooltip.value.visible ? tooltip.value.country : (selectedDistrictChart.value?.district ?? ''),
+  tooltip.value.visible ? tooltip.value.country : '',
 )
 const centerTooltipDetail = computed(() => {
   if (tooltip.value.visible) {
     return `${tooltip.value.percent.toFixed(1)}% · ${formatTonnes(tooltip.value.tonnes)} t`
   }
-  if (!selectedDistrictChart.value) return ''
-  return `${formatTonnes(selectedDistrictChart.value.totalTonnes)} t total`
+  return ''
 })
+const importsTitleReference = 'Where Does New York Buy Bluefin?'
+const importsTitleCity = computed(() =>
+  selectedDistrictChart.value
+    ? formatDistrictCity(selectedDistrictChart.value.district)
+    : formatDistrictCity(selectedKey.value),
+)
 
 function onArcEnter(district, segment) {
   hoveredCountry.value = segment.country
@@ -433,6 +483,10 @@ function formatTonnes(value) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 })
 }
 
+function formatDistrictCity(district) {
+  return district.split(',')[0]?.trim() || district
+}
+
 function districtHasCountrySlice(district, country) {
   if (!country || !district?.arcs?.length) return false
   return district.arcs.some((a) => a.data.country === country)
@@ -441,7 +495,14 @@ function districtHasCountrySlice(district, country) {
 
 <template>
   <div class="imports-wrap">
-    <h1 class="visual-title imports-title">Where Does Your Sushi Come From?</h1>
+    <h1 class="visual-title imports-title">
+      <span class="imports-title-anchor">
+        <span class="imports-title-reference" aria-hidden="true">{{ importsTitleReference }}</span>
+        <span class="imports-title-text">
+          Where Does <span class="imports-title-city">{{ importsTitleCity }}</span> Buy Bluefin?
+        </span>
+      </span>
+    </h1>
     <div class="imports-body imports-body--with-menu">
       <aside class="district-menu" aria-label="Customs district selection">
         <div
@@ -456,20 +517,26 @@ function districtHasCountrySlice(district, country) {
             :key="district.district"
             type="button"
             class="district-menu-card"
-            :class="{ 'district-menu-card--active': selectedKey === district.district }"
+            :class="{
+              'district-menu-card--active': selectedKey === district.district,
+              'district-menu-card--country-highlight':
+                hoveredCountry && districtHasCountrySlice(district, hoveredCountry),
+              'district-menu-card--country-muted':
+                hoveredCountry && !districtHasCountrySlice(district, hoveredCountry),
+            }"
             :aria-label="`Select ${district.district}, ${formatTonnes(district.totalTonnes)} t total`"
             @click="selectedKey = district.district"
           >
             <div class="district-menu-card__viz">
               <svg
-                :viewBox="`0 0 ${GRID_SVG_SIZE} ${GRID_SVG_SIZE}`"
+                :viewBox="`0 0 ${donutGeometry.gridSvgSize} ${donutGeometry.gridSvgSize}`"
                 class="donut-svg donut-svg--menu"
                 preserveAspectRatio="xMidYMid meet"
                 width="100%"
                 height="100%"
                 aria-hidden="true"
               >
-                <g :transform="`translate(${GRID_CENTER},${GRID_CENTER})`">
+                <g :transform="`translate(${donutGeometry.gridCenter},${donutGeometry.gridCenter})`">
                   <path
                     v-for="arcDatum in district.arcs"
                     :key="`${district.district}-${arcDatum.data.country}`"
@@ -487,7 +554,7 @@ function districtHasCountrySlice(district, country) {
               </svg>
             </div>
             <span class="district-menu-card__label">
-              {{ district.district }}
+              {{ formatDistrictCity(district.district) }}
             </span>
           </button>
         </div>
@@ -504,17 +571,17 @@ function districtHasCountrySlice(district, country) {
               >
                 <span class="district-heading-over-donut__name">{{ selectedDistrictChart.district }}</span>
                 <span class="district-heading-over-donut__tonnes">
-                  {{ formatTonnes(selectedDistrictChart.totalTonnes) }} t total
+                  {{ formatTonnes(selectedDistrictChart.totalTonnes) }} tonnes total
                 </span>
               </h3>
               <div class="district-donut-stage">
                 <svg
-                  :width="SINGLE_SVG_SIZE"
-                  :height="SINGLE_SVG_SIZE"
-                  :viewBox="`0 0 ${SINGLE_SVG_SIZE} ${SINGLE_SVG_SIZE}`"
+                  :width="donutGeometry.singleSvgSize"
+                  :height="donutGeometry.singleSvgSize"
+                  :viewBox="`0 0 ${donutGeometry.singleSvgSize} ${donutGeometry.singleSvgSize}`"
                   class="donut-svg donut-svg--single"
                 >
-                  <g :transform="`translate(${SINGLE_CENTER},${SINGLE_CENTER})`">
+                  <g :transform="`translate(${donutGeometry.singleCenter},${donutGeometry.singleCenter})`">
                 <Transition name="donut-fade" mode="out-in" @after-enter="onDonutArcsAfterEnter">
                   <g :key="selectedDistrictChart.district" class="donut-arcs">
                     <path
@@ -607,27 +674,55 @@ function districtHasCountrySlice(district, country) {
 
 <style scoped>
 .imports-wrap {
+  --district-menu-card-padding: clamp(0.1rem, 0.6vw, 0.2rem);
+
   position: relative;
-  padding: var(--story-section-padding-y) var(--story-section-padding-x);
-  font-family: var(--font-ui);
-  font-weight: var(--font-weight-ui);
-  /* Fill the section ("min-screen" => 100vh on the parent .story-section) and flex-center the title + body
-     so the donut visual no longer hugs the top edge of the screen. */
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  width: 100%;
+  height: var(--viz-chart-wrap-height);
+  max-height: var(--viz-chart-wrap-max-height);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-ui);
 }
 
 .imports-title {
+  flex-shrink: 0;
   margin-bottom: var(--space-visual-title-gap);
+}
+
+.imports-title-anchor {
+  position: relative;
+  display: inline-block;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.imports-title-reference {
+  visibility: hidden;
+}
+
+.imports-title-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.imports-title-city {
+  text-decoration: underline;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.08em;
 }
 
 .imports-body {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  max-width: min(96vw, 1760px);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: min(86.4vw, calc(1584px * var(--story-scale)));
   margin: 0 auto;
 }
 
@@ -647,31 +742,32 @@ function districtHasCountrySlice(district, country) {
   min-height: 0;
   align-self: stretch;
   height: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.22);
-  border-right: none;
-  border-radius: 0.6rem 0 0 0.6rem;
   padding: 0.5rem;
   background: rgba(255, 255, 255, 0.5);
 }
 
 .district-menu-grid {
-  flex: none;
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: grid;
-  gap: clamp(0.2rem, 1.2vw, 0.45rem);
+  column-gap: clamp(0.2rem, 1.2vw, 0.45rem);
+  row-gap: clamp(0.55rem, 1.5vw, 0.9rem);
   align-content: stretch;
   justify-content: stretch;
 }
 
 .district-menu-card {
   position: relative;
-  display: grid;
-  grid-template: 1fr / 1fr;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
   min-width: 0;
   min-height: 0;
   margin: 0;
-  padding: clamp(0.1rem, 0.6vw, 0.2rem);
+  padding: var(--district-menu-card-padding);
   border: none;
   border-radius: 0.3rem;
   background: transparent;
@@ -679,7 +775,7 @@ function districtHasCountrySlice(district, country) {
   transition: box-shadow 0.14s ease;
 }
 
-.district-menu-card:hover {
+.district-menu-card:not(.district-menu-card--active):hover {
   box-shadow: none;
 }
 
@@ -689,47 +785,49 @@ function districtHasCountrySlice(district, country) {
 }
 
 .district-menu-card__viz {
-  grid-area: 1 / 1;
-  z-index: 0;
+  flex: 0 1 auto;
+  min-height: 0;
   width: 100%;
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
   height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   justify-self: center;
   align-self: center;
   transition: opacity 0.18s ease;
 }
 
-.district-menu-card:hover .district-menu-card__viz {
-  opacity: 0.38;
-}
-
 .district-menu-card__label {
-  grid-area: 1 / 1;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  justify-self: stretch;
-  padding: 0.15rem;
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 0;
   text-align: center;
-  font-size: clamp(0.52rem, 2.1vw, 0.72rem);
+  font-size: var(--font-size-ui);
   font-weight: var(--font-weight-ui);
   line-height: 1.15;
   color: #0f172a;
   background: none;
+  opacity: 0.32;
   pointer-events: none;
-  opacity: 0;
   transition: opacity 0.16s ease;
-  text-shadow:
-    0 0 6px rgba(255, 255, 255, 0.98),
-    0 0 14px rgba(255, 255, 255, 0.85),
-    0 1px 2px rgba(255, 255, 255, 0.95);
 }
 
-.district-menu-card:hover .district-menu-card__label {
+.district-menu-card:hover .district-menu-card__label,
+.district-menu-card:focus-visible .district-menu-card__label,
+.district-menu-card--active .district-menu-card__label,
+.district-menu-card--country-highlight .district-menu-card__label {
+  opacity: 1;
+}
+
+.district-menu-card--country-muted .district-menu-card__label {
+  opacity: 0.32;
+}
+
+.district-menu-card--active.district-menu-card--country-muted .district-menu-card__label {
   opacity: 1;
 }
 
@@ -742,7 +840,7 @@ function districtHasCountrySlice(district, country) {
 }
 
 .arc-segment--menu.arc-segment--highlight {
-  stroke-width: 1.65;
+  stroke-width: calc(1.65px * var(--story-scale));
 }
 
 .imports-center {
@@ -755,9 +853,7 @@ function districtHasCountrySlice(district, country) {
   min-height: 0;
   align-self: stretch;
   height: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.22);
-  border-radius: 0 0.6rem 0.6rem 0;
-  padding: 0.5rem 0.65rem 0.65rem;
+  padding: 0.5rem 0.65rem 0.5rem;
   background: rgba(255, 255, 255, 0.35);
 }
 
@@ -776,6 +872,8 @@ function districtHasCountrySlice(district, country) {
 }
 
 .district-single-stack {
+  --district-display-label-space: clamp(2.25rem, 6.2vw, 2.8rem);
+
   position: relative;
   display: flex;
   flex-direction: column;
@@ -783,18 +881,17 @@ function districtHasCountrySlice(district, country) {
   min-height: 0;
   align-items: center;
   width: 100%;
-  max-width: min(100%, 1000px);
+  max-width: min(100%, calc(1000px * var(--story-scale)));
   margin-inline: auto;
-  /* Reserve space so the floating district title sits inside the panel, not above its border */
-  padding-top: clamp(2.25rem, 6.2vw, 2.8rem);
+  padding-bottom: var(--district-display-label-space);
 }
 
 .district-heading-over-donut--float {
   position: absolute;
-  top: 0.35rem;
+  top: auto;
   left: 0;
   right: 0;
-  bottom: auto;
+  bottom: var(--district-menu-card-padding);
   margin: 0;
   z-index: 1;
   pointer-events: none;
@@ -807,6 +904,7 @@ function districtHasCountrySlice(district, country) {
   align-items: center;
   justify-content: center;
   width: 100%;
+  transform: translateY(calc(var(--district-display-label-space) / 2));
 }
 
 .district-heading-over-donut {
@@ -814,7 +912,7 @@ function districtHasCountrySlice(district, country) {
   margin: 0;
   width: 100%;
   text-align: center;
-  font-size: var(--font-size-ui);
+  font-size: var(--font-size-axis-title);
   font-weight: var(--font-weight-ui);
   line-height: 1.25;
   color: #0f172a;
@@ -822,12 +920,16 @@ function districtHasCountrySlice(district, country) {
 
 .district-heading-over-donut__name {
   display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 0.15rem);
 }
 
 .district-heading-over-donut__tonnes {
   display: block;
-  margin-top: 0.15rem;
-  font-size: var(--font-size-ui);
+  margin-top: 0;
+  font-size: var(--font-size-axis-title);
   font-weight: var(--font-weight-ui);
   color: #475569;
 }
@@ -871,7 +973,7 @@ function districtHasCountrySlice(district, country) {
 .arc-segment--highlight {
   opacity: 1;
   stroke: #0f172a;
-  stroke-width: 1.1;
+  stroke-width: calc(1.1px * var(--story-scale));
 }
 
 .callout-group {
@@ -881,7 +983,7 @@ function districtHasCountrySlice(district, country) {
 }
 
 .callout-line {
-  stroke-width: 2.35;
+  stroke-width: calc(2.35px * var(--story-scale));
   stroke-linejoin: round;
   stroke-linecap: round;
   pointer-events: visibleStroke;
@@ -889,7 +991,7 @@ function districtHasCountrySlice(district, country) {
 
 .callout-dot {
   stroke: rgba(15, 23, 42, 0.25);
-  stroke-width: 0.75;
+  stroke-width: calc(0.75px * var(--story-scale));
   pointer-events: visibleFill;
 }
 
@@ -899,7 +1001,7 @@ function districtHasCountrySlice(district, country) {
   font-weight: 600;
   paint-order: stroke;
   stroke: rgba(255, 255, 255, 0.96);
-  stroke-width: 2.25;
+  stroke-width: calc(2.25px * var(--story-scale));
   stroke-linejoin: round;
   pointer-events: none;
 }
@@ -913,7 +1015,7 @@ function districtHasCountrySlice(district, country) {
 }
 
 .callout-group--highlight .callout-line {
-  stroke-width: 2.85;
+  stroke-width: calc(2.85px * var(--story-scale));
 }
 
 .center-tooltip {
@@ -935,17 +1037,14 @@ function districtHasCountrySlice(district, country) {
 .center-tooltip text {
   paint-order: stroke;
   stroke: rgba(255, 255, 255, 0.96);
-  stroke-width: 3;
+  stroke-width: calc(3px * var(--story-scale));
   stroke-linejoin: round;
 }
 
 @media (min-width: 1600px) {
   .district-menu-grid {
-    gap: clamp(0.35rem, 1.4vw, 0.7rem);
-  }
-
-  .district-menu-card__label {
-    font-size: clamp(0.7rem, 1.2vw, 0.95rem);
+    column-gap: clamp(0.35rem, 1.4vw, 0.7rem);
+    row-gap: clamp(0.75rem, 1.7vw, 1.1rem);
   }
 }
 
@@ -961,21 +1060,20 @@ function districtHasCountrySlice(district, country) {
 
   .district-menu {
     width: 100%;
-    border-right: 1px solid rgba(15, 23, 42, 0.22);
-    border-radius: 0.6rem;
   }
 
   .district-menu-grid {
     flex: none;
     min-height: auto;
+    height: auto;
     grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr)) !important;
     grid-template-rows: none !important;
-    grid-auto-rows: minmax(3.25rem, auto);
-    gap: 0.35rem;
+    grid-auto-rows: minmax(4rem, auto);
+    gap: 0.5rem 0.35rem;
   }
 
   .imports-center {
-    border-radius: 0.6rem;
+    border-radius: 0;
   }
 }
 </style>

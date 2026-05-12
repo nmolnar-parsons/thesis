@@ -15,7 +15,7 @@ defineProps({
 <template>
   <StorySection id="country-production" height="min-screen" width="full">
     <div class="country-production-shell">
-      <SectionGrid :columns="12" gap="1.25rem" align="start">
+      <SectionGrid class="country-production-grid" :columns="12" gap="1.25rem" align="start">
         <div v-if="!minimalMode" class="story-copy story-copy--top production-copy">
           <CopyBlock title="Global Production">
             <p>
@@ -34,7 +34,14 @@ defineProps({
 
 <style scoped>
 .country-production-shell {
-  padding-top: 64px;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.country-production-grid {
+  width: 100%;
 }
 
 .production-copy {

@@ -1,13 +1,8 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { computeFishBreakdownLayout, parse2023Counts } from '../composables/useFishBreakdownLayout.js'
-import csvRaw from '../data/toyosu_tuna_2023.csv?raw'
-import pacificFishUrl from '../visuals/tuna-images/pacific-bluefin.png'
 import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import CopyBlock from '../components/layout/CopyBlock.vue'
 import BreakdownFishVisual from '../visuals/BreakdownFishVisual.vue'
-import FishGridAnnotationLayer from '../components/story/FishGridAnnotationLayer.vue'
 
 defineProps({
   minimalMode: {
@@ -16,54 +11,6 @@ defineProps({
   },
 })
 
-const fishAspect = ref(2.3)
-const containerRef = ref(null)
-const containerSize = ref({ width: 0, height: 0 })
-
-const fishTotals = computed(() => parse2023Counts(csvRaw))
-
-const layout = computed(() => {
-  const { width, height } = containerSize.value
-  if (!width || !height) return null
-  return computeFishBreakdownLayout(width, height, fishAspect.value, fishTotals.value)
-})
-
-let ro = null
-
-onMounted(() => {
-  const img = new Image()
-  img.onload = () => {
-    if (img.naturalWidth && img.naturalHeight) {
-      fishAspect.value = img.naturalWidth / img.naturalHeight
-    }
-  }
-  img.src = pacificFishUrl
-
-  const el = containerRef.value
-  if (el && typeof ResizeObserver !== 'undefined') {
-    ro = new ResizeObserver((entries) => {
-      const cr = entries[0]?.contentRect
-      if (cr) {
-        containerSize.value = { width: cr.width, height: cr.height }
-      }
-    })
-    ro.observe(el)
-    containerSize.value = { width: el.clientWidth, height: el.clientHeight }
-  }
-})
-
-onUnmounted(() => {
-  ro?.disconnect()
-})
-
-/** Single-fish callout (steps 1–3). Use `\n` or a multi-line template string in `body` for line breaks. */
-const singleFishAnnotations = [
-  {
-    id: 'single-bluefin',
-    body: 'Bluefin Tuna\n490 - 550 lbs\n6 - 8 ft',
-  },
-]
-
 const steps = [
   {
     id: 'fish-grid-single-fade',
@@ -71,9 +18,9 @@ const steps = [
     text: 'A single Pacific bluefin comes into view.',
   },
   {
-    id: 'fish-grid-single-annotate',
+    id: 'fish-grid-single-hold',
     title: 'One fish',
-    text: 'Labels clarify what you are looking at before we zoom out.',
+    text: 'Stay with the lone fish before the view begins to zoom out.',
   },
   {
     id: 'fish-grid-single-linger-a',
@@ -122,16 +69,10 @@ const steps = [
   <StorySection id="fish-grid" height="overscroll" width="full">
     <PinnedScrollSection :steps="steps" :scroll-offset="0.65">
       <template #graphic="graphicProps">
-        <div ref="containerRef" class="fish-grid-graphic-wrap">
+        <div class="fish-grid-graphic-wrap">
           <BreakdownFishVisual
             :active-step="graphicProps.activeStep"
             :step-progress="graphicProps.stepProgress"
-          />
-          <FishGridAnnotationLayer
-            :layout="layout"
-            :active-step="graphicProps.activeStep"
-            :step-progress="graphicProps.stepProgress"
-            :annotations="singleFishAnnotations"
           />
         </div>
       </template>

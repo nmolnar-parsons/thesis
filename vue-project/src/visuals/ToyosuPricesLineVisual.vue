@@ -7,6 +7,7 @@ import { scaleLinear } from 'd3-scale'
 import { pointer, select } from 'd3-selection'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import csvRaw from '../data/toyosu_avg_all.csv?raw'
+import { readStoryScale } from '../utils/readStoryScale.js'
 
 const wrapRef = ref(null)
 const hostRef = ref(null)
@@ -157,7 +158,14 @@ function drawChart() {
   const width = host.clientWidth || 860
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
-  const margin = { top: 34, right: 34, bottom: 46, left: 84 }
+  const storyScale = readStoryScale(wrapRef.value ?? host)
+  const scalePx = (value) => value * storyScale
+  const margin = {
+    top: scalePx(34),
+    right: scalePx(34),
+    bottom: scalePx(46),
+    left: scalePx(84),
+  }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
   if (innerWidth < 20 || innerHeight < 20) return
@@ -182,7 +190,7 @@ function drawChart() {
     .attr('class', 'hover-line')
     .attr('x1', 0)
     .attr('x2', 0)
-    .attr('y1', 20)
+    .attr('y1', scalePx(20))
     .attr('y2', innerHeight)
     .style('opacity', 0)
 
@@ -190,7 +198,7 @@ function drawChart() {
     .append('text')
     .attr('class', 'hover-line-label')
     .attr('x', 0)
-    .attr('y', 14)
+    .attr('y', scalePx(14))
     .attr('text-anchor', 'middle')
     .style('opacity', 0)
 
@@ -208,14 +216,14 @@ function drawChart() {
     .call(
       axisLeft(yScale)
         .ticks(7)
-        .tickPadding(10)
+        .tickPadding(scalePx(10))
         .tickFormat((d) => Number(d).toLocaleString()),
     )
 
   g.append('text')
     .attr('class', 'axis-label')
     .attr('x', innerWidth / 2)
-    .attr('y', innerHeight + 38)
+    .attr('y', innerHeight + scalePx(38))
     .attr('text-anchor', 'middle')
     .text('Year')
 
@@ -223,7 +231,7 @@ function drawChart() {
     .attr('class', 'axis-label')
     .attr('transform', 'rotate(-90)')
     .attr('x', -innerHeight / 2)
-    .attr('y', -54)
+    .attr('y', scalePx(-54))
     .attr('text-anchor', 'middle')
     .text('Price per kg (JPY)')
 
@@ -242,7 +250,7 @@ function drawChart() {
     .attr('stroke', (d) => d.color)
     .attr('stroke-dasharray', (d) => d.dasharray || null)
     .attr('fill', 'none')
-    .attr('stroke-width', (d) => d.strokeWidth || 2)
+    .attr('stroke-width', (d) => scalePx(d.strokeWidth || 2))
     .attr('stroke-opacity', (d) => d.defaultOpacity ?? 1)
 
   const tooltipEl = tooltipRef.value
@@ -253,7 +261,7 @@ function drawChart() {
     .attr('data-series-id', (d) => d.id)
     .attr('d', (d) => lineGen(d.points))
     .attr('stroke', 'transparent')
-    .attr('stroke-width', 12)
+    .attr('stroke-width', scalePx(12))
     .attr('fill', 'none')
     .attr('pointer-events', 'stroke')
     .on('mouseenter', function (event, d) {
@@ -262,16 +270,16 @@ function drawChart() {
       if (!tooltipEl) return
       tooltipEl.style.opacity = '1'
       tooltipEl.textContent = d.itemName
-      tooltipEl.style.left = `${event.offsetX + 12}px`
-      tooltipEl.style.top = `${event.offsetY + 12}px`
+      tooltipEl.style.left = `${event.offsetX + scalePx(12)}px`
+      tooltipEl.style.top = `${event.offsetY + scalePx(12)}px`
     })
     .on('mousemove', function (event, d) {
       if (!lockedSeriesId.value) setActiveSeries(d.id)
       updateHoverLine(event)
       if (!tooltipEl) return
       tooltipEl.textContent = d.itemName
-      tooltipEl.style.left = `${event.offsetX + 12}px`
-      tooltipEl.style.top = `${event.offsetY + 12}px`
+      tooltipEl.style.left = `${event.offsetX + scalePx(12)}px`
+      tooltipEl.style.top = `${event.offsetY + scalePx(12)}px`
     })
     .on('mouseleave', () => {
       if (!lockedSeriesId.value) clearActiveSeries()
@@ -437,11 +445,15 @@ onUnmounted(() => {
 
 <style scoped>
 .linechart-wrap {
-  --viz-height: clamp(320px, 70vh, 560px);
+  --viz-height: clamp(
+    calc(320px * var(--story-scale)),
+    70vh,
+    calc(560px * var(--story-scale))
+  );
   position: relative;
   width: 100%;
   height: var(--viz-height);
-  max-height: 560px;
+  max-height: calc(560px * var(--story-scale));
   overflow: hidden;
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);
@@ -488,7 +500,7 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.series-line.is-active) {
   opacity: 1;
-  stroke-width: 3.2;
+  stroke-width: calc(3.2px * var(--story-scale));
 }
 
 .linechart-wrap :deep(.series-line.is-inactive) {
@@ -501,7 +513,7 @@ onUnmounted(() => {
 
 .linechart-wrap :deep(.hover-line) {
   stroke: #334155;
-  stroke-width: 2;
+  stroke-width: calc(2px * var(--story-scale));
   stroke-dasharray: 6 4;
   pointer-events: none;
 }
@@ -520,7 +532,7 @@ onUnmounted(() => {
   bottom: 0.65rem;
   z-index: 6;
   width: auto;
-  max-width: min(280px, 46vw);
+  max-width: min(calc(280px * var(--story-scale)), 46vw);
   overflow: auto;
   padding: 0.42rem 0.52rem;
   border: 1px solid rgba(15, 23, 42, 0.3);
@@ -560,7 +572,7 @@ onUnmounted(() => {
 .swatch {
   width: 1rem;
   height: 0;
-  border-top: 3px solid var(--swatch-color);
+  border-top: calc(3px * var(--story-scale)) solid var(--swatch-color);
   border-top-style: solid;
   border-radius: 2px;
   background: transparent;

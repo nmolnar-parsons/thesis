@@ -6,6 +6,7 @@ import tunaCatchData5degUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.
 import tunaCatchData5degRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
 import iccatFishFarmsCentroidsUrl from '../data/iccat_fish_farms_centroids.geojson?url'
 import { readColorDefaultBlue, readColorTunaFarmed } from '../utils/readStoryColors.js'
+import { readStoryScale } from '../utils/readStoryScale.js'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
@@ -16,6 +17,8 @@ const COUNT_TO_TONNE = 1 / 4
 const TONNE_TO_COUNT = 1 / COUNT_TO_TONNE
 /** Upper bounds for each ramp step (Mapbox `step`: default color applies below first stop). */
 const CATCH_TONNE_STEP_STOPS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000]
+const CATCH_TONNE_LEGEND_TICKS = ['0', '100', '1000', '10000']
+const CATCH_TONNE_LEGEND_TITLE = 'Bluefin Tuna Catch (tonnes)'
 
 /**
  * Colors above `--color-default-blue` tier. Must align in length with CATCH_TONNE_STEP_STOPS.
@@ -60,6 +63,12 @@ const ICCAT_FARMS_LAYER_ID = 'iccat-fish-farms-circles'
 const FARM_CIRCLES_MIN_ZOOM = 4.0
 const FARM_CIRCLES_FILL_OPACITY_VISIBLE = 0.95
 const FARM_CIRCLES_STROKE_OPACITY_VISIBLE = 1
+const FARM_CIRCLE_RADIUS = 14
+const FARM_CIRCLE_STROKE_WIDTH = 0.5
+const MAP_REFERENCE_WIDTH = 1920
+const MAP_REFERENCE_HEIGHT = 1080
+const MAP_GLOBAL_REFERENCE_ZOOM = 1.6
+const MAP_MEDITERRANEAN_REFERENCE_ZOOM = 4.8
 /** Opacity tween when ICCAT farms should show or hide */
 const FARM_CIRCLES_FADE_MS = 520
 
@@ -141,6 +150,7 @@ const DEFAULT_FILLER = 'default filler'
 const mapRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
+const farmLegendVisible = ref(false)
 let map = null
 let resizeObserver = null
 let activeCameraKey = ''
@@ -162,6 +172,8 @@ const currentYear = computed(() => {
   const span = YEAR_END - YEAR_START
   return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(YEAR_START + yearT * span)))
 })
+
+const mapTitle = computed(() => `Where Bluefin Was Caught in ${currentYear.value}`)
 
 function parseYearlyTotals5deg() {
   const empty = new Map()
@@ -230,6 +242,8 @@ const mapLegendGradient = computed(() => {
   const stops = [low, ...CATCH_COLOR_RAMP_ABOVE_ZERO].join(', ')
   return `linear-gradient(to right, ${stops})`
 })
+
+const farmLegendDotColor = computed(() => readColorTunaFarmed())
 
 const narrativeCopy = computed(() => {
   if (props.activeStep >= STEP_FULLVIEW_LINGER_START && props.activeStep <= STEP_FULLVIEW_LINGER_END) {
@@ -353,18 +367,26 @@ function applyTunaCatchFillSeamMitigation() {
 
 function updateFarmCirclesPaint() {
   if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) return
+  const storyScale = readStoryScale(mapRef.value)
+  map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-radius', FARM_CIRCLE_RADIUS * storyScale)
   map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-color', readColorTunaFarmed())
+  map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-stroke-width', FARM_CIRCLE_STROKE_WIDTH * storyScale)
   map.setPaintProperty(ICCAT_FARMS_LAYER_ID, 'circle-stroke-color', 'rgba(255, 255, 255, 0.92)')
 }
 
 function syncFarmCirclesVisibility() {
-  if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) return
+  if (!map || !mapReady.value || !map.getLayer(ICCAT_FARMS_LAYER_ID)) {
+    farmLegendVisible.value = false
+    return
+  }
   updateFarmCirclesPaint()
   const step = props.activeStep
   const inMedFarmBeat =
     step >= STEP_MEDITERRANEAN_FARMS_START
     && currentYear.value === YEAR_END
-  const show = inMedFarmBeat && map.getZoom() >= FARM_CIRCLES_MIN_ZOOM
+  const farmMinZoom = zoomForReferenceFrame(FARM_CIRCLES_MIN_ZOOM)
+  const show = inMedFarmBeat && map.getZoom() >= farmMinZoom
+  farmLegendVisible.value = show
   if (show === farmCirclesFadeTargetShow) return
   farmCirclesFadeTargetShow = show
   fadeFarmCirclesTo(show)
@@ -376,13 +398,27 @@ function attachFarmCirclesViewportListeners() {
   map.on('moveend', syncFarmCirclesVisibility)
 }
 
+function mapReferenceFrameScale() {
+  const el = mapRef.value
+  const width = el?.clientWidth || MAP_REFERENCE_WIDTH
+  const height = el?.clientHeight || MAP_REFERENCE_HEIGHT
+  const scale = Math.min(width / MAP_REFERENCE_WIDTH, height / MAP_REFERENCE_HEIGHT)
+
+  if (!Number.isFinite(scale) || scale <= 0) return 1
+  return Math.min(1, Math.max(0.45, scale))
+}
+
+function zoomForReferenceFrame(referenceZoom) {
+  return referenceZoom + Math.log2(mapReferenceFrameScale())
+}
+
 function cameraForStep(stepIndex) {
   const cameraPadding = { top: 24, right: 24, bottom: 24, left: 24 }
   if (stepIndex >= STEP_MEDITERRANEAN_START) {
     return {
       key: 'mediterranean',
       center: [14, 38],
-      zoom: 4.8,
+      zoom: zoomForReferenceFrame(MAP_MEDITERRANEAN_REFERENCE_ZOOM),
       duration: STEP_ANIMATION_DURATION_MS,
       padding: cameraPadding,
     }
@@ -390,7 +426,7 @@ function cameraForStep(stepIndex) {
   return {
     key: 'global',
     center: [0, 0],
-    zoom: 1.6,
+    zoom: zoomForReferenceFrame(MAP_GLOBAL_REFERENCE_ZOOM),
     duration: STEP_ANIMATION_DURATION_MS,
     padding: cameraPadding,
   }
@@ -432,7 +468,7 @@ onMounted(() => {
     style: 'mapbox://styles/mapbox/light-v11',
     center: [0, 0],
     /* Match the global cameraForStep zoom so the first frame doesn't snap when updateCameraForStep eases. */
-    zoom: 1.6,
+    zoom: zoomForReferenceFrame(MAP_GLOBAL_REFERENCE_ZOOM),
     projection: DEFAULT_PROJECTION,
     renderWorldCopies: true,
     /** No default AttributionControl (avoids the compact “i” UI); text links are in the template. */
@@ -484,10 +520,10 @@ onMounted(() => {
         visibility: 'visible',
       },
       paint: {
-        'circle-radius': 14,
+        'circle-radius': FARM_CIRCLE_RADIUS * readStoryScale(mapRef.value),
         'circle-color': readColorTunaFarmed(),
         'circle-opacity': 0,
-        'circle-stroke-width': 0.5,
+        'circle-stroke-width': FARM_CIRCLE_STROKE_WIDTH * readStoryScale(mapRef.value),
         'circle-stroke-color': 'rgba(255, 255, 255, 0.92)',
         'circle-stroke-opacity': 0,
       },
@@ -508,6 +544,7 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(() => {
     if (!map || !mapReady.value) return
     map.resize()
+    updateFarmCirclesPaint()
     updateCameraForStep(props.activeStep, true)
     syncFarmCirclesVisibility()
   })
@@ -539,19 +576,16 @@ onUnmounted(() => {
 
 <template>
   <div class="map-frame">
-    <h1 class="visual-title visual-title--on-dark map-title">Where We Catch Bluefin is Shifting</h1>
+    <h1 class="visual-title visual-title--on-dark map-title">{{ mapTitle }}</h1>
     <div ref="mapRef" class="map-host" />
 
-    <div class="hud-row">
-      <div class="metrics-card" :class="{ 'metrics-card--minimal': minimalMode }">
-        <p class="year-text">{{ currentYear }}</p>
-        <div v-if="!minimalMode" class="metrics-card-details">
-          <p class="metric-line">
-            <span class="metric-caption">Total fish caught:</span>
-            <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
-          </p>
-          <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
-        </div>
+    <div v-if="!minimalMode" class="hud-row">
+      <div class="metrics-card">
+        <p class="metric-line">
+          <span class="metric-caption">Total fish caught:</span>
+          <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
+        </p>
+        <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
       </div>
     </div>
 
@@ -582,12 +616,20 @@ onUnmounted(() => {
       Add `VITE_MAPBOX_TOKEN` in your local `.env` to render the map.
     </p>
 
-    <aside class="map-legend" aria-label="Catch intensity legend">
+    <aside class="map-legend" aria-label="Catch intensity and farm locations legend">
+      <div v-if="farmLegendVisible" class="map-legend-farms">
+        <span
+          class="map-legend-farm-dot"
+          :style="{ backgroundColor: farmLegendDotColor }"
+          aria-hidden="true"
+        />
+        <span>Registered Bluefin Tuna Farm</span>
+      </div>
       <div class="map-legend-bar" :style="{ background: mapLegendGradient }" />
       <div class="map-legend-labels">
-        <span>low catch</span>
-        <span>high catch</span>
+        <span v-for="tick in CATCH_TONNE_LEGEND_TICKS" :key="tick">{{ tick }}</span>
       </div>
+      <div class="map-legend-scale-title">{{ CATCH_TONNE_LEGEND_TITLE }}</div>
     </aside>
 
     <div v-if="!tokenMissing" class="map-attrib-bar">
@@ -609,7 +651,7 @@ onUnmounted(() => {
   --map-hud-inset-left: 0.85rem;
   --map-bottom-chrome: 0.45rem;
   /** Catch-intensity legend (bottom-right) + full metrics card — same width (~⅔ of former 440px) */
-  --map-hud-panel-width: min(300px, 72vw);
+  --map-hud-panel-width: min(calc(300px * var(--story-scale)), 72vw);
   /** Same horizontal inset as `--map-hud-inset-left`; keeps `.hud-row` stretched between edges */
   --map-hud-inset-right: 0.85rem;
   position: relative;
@@ -628,6 +670,9 @@ onUnmounted(() => {
   padding: 0;
   transform: translateX(-50%);
   width: calc(100% - 2rem);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 
@@ -703,8 +748,7 @@ onUnmounted(() => {
   text-underline-offset: 2px;
 }
 
-/* Nudge up by 1px so year cap-height lines up with .map-title (card top border)
-   Without left+right (or explicit width), absolute positioning shrink-wraps to content and
+/* Without left+right (or explicit width), absolute positioning shrink-wraps to content and
    `width: %` on `.metrics-card` never establishes a fixed column — text drives the box width. */
 .hud-row {
   position: absolute;
@@ -718,32 +762,15 @@ onUnmounted(() => {
 .metrics-card {
   box-sizing: border-box;
   margin: 0;
-  padding: 0 0.8rem 0.7rem 0.8rem;
+  padding: 0.7rem 0.8rem;
   border-radius: 0;
   border: 1px solid rgba(15, 23, 42, 0.2);
   background: rgba(255, 255, 255, 0.92);
   color: #000000;
   display: block;
   overflow-wrap: break-word;
-}
-
-.metrics-card:not(.metrics-card--minimal) {
   width: var(--map-hud-panel-width);
   max-width: 100%;
-}
-
-.metrics-card--minimal {
-  /* Hug the year line; horizontal padding on `.metrics-card` stays equal L/R (no fixed width clipping) */
-  width: fit-content;
-  max-width: 100%;
-  padding-inline: 0.85rem;
-}
-
-.metrics-card-details {
-  margin-top: var(--space-visual-title-gap);
-  padding-top: var(--space-visual-title-gap);
-  border-top: 1px solid rgba(15, 23, 42, 0.14);
-  min-width: 0;
 }
 
 .narrative-copy {
@@ -782,7 +809,7 @@ onUnmounted(() => {
 
 .map-legend-bar {
   width: 100%;
-  height: 12px;
+  height: calc(18px * var(--story-scale));
   border-radius: 0;
   border: 1px solid rgba(15, 23, 42, 0.18);
 }
@@ -796,19 +823,31 @@ onUnmounted(() => {
   color: #0f172a;
 }
 
-.year-text {
-  margin: 0;
-  padding: 0;
-  color: #000000;
-  font-family: var(--font-visual-title);
-  font-size: var(--font-size-visual-title);
-  font-weight: var(--font-weight-visual-title);
-  line-height: var(--line-height-visual-title);
+.map-legend-scale-title {
+  margin-top: 0.35rem;
+  color: #0f172a;
+  font-size: var(--font-size-ui);
+  line-height: var(--viz-legend-line-height);
 }
 
-.metrics-card--minimal .year-text {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+.map-legend-farms {
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #0f172a;
+  font-size: var(--font-size-ui);
+  line-height: var(--viz-legend-line-height);
+}
+
+.map-legend-farm-dot {
+  width: calc(28px * var(--story-scale));
+  height: calc(28px * var(--story-scale));
+  flex: 0 0 calc(28px * var(--story-scale));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
 }
 
 .metric-line {
@@ -842,7 +881,7 @@ onUnmounted(() => {
 
 .mediterranean-callout {
   left: 52%;
-  /* Tuned visually against the bumped global cameraForStep zoom (1.6) on 1920x1080. */
+  /* Tuned visually against the 1920x1080 reference camera. */
   top: 30%;
   width: min(34vmin, 460px);
   aspect-ratio: 427.36 / 170.1;
@@ -859,7 +898,7 @@ onUnmounted(() => {
 .mediterranean-basin-shape path {
   fill: var(--story-annotation-map-stroke);
   stroke: var(--story-annotation-map-stroke);
-  stroke-width: var(--story-annotation-map-stroke-width);
+  stroke-width: 2;
 }
 
 @media (max-width: 520px) {
