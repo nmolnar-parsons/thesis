@@ -20,17 +20,12 @@ const steps = [
   {
     id: 'fish-grid-single-hold',
     title: 'One fish',
-    text: 'Stay with the lone fish before the view begins to zoom out.',
+    text: 'Hold on the fish before the scale begins to shift.',
   },
   {
-    id: 'fish-grid-single-linger-a',
+    id: 'fish-grid-single-linger',
     title: 'One fish',
-    text: 'Hold on the lone fish for a beat.',
-  },
-  {
-    id: 'fish-grid-single-linger-b',
-    title: 'One fish',
-    text: 'Another linger so the scale lands before the field expands.',
+    text: 'Stay with the single fish for one more beat.',
   },
   {
     id: 'fish-grid-single-to-week',

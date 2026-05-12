@@ -19,7 +19,6 @@ const steps = [
   { id: 'm4', title: '', text: '' },
   { id: 'm5', title: '', text: '' },
   // 5–8: global 2023 linger (basin cue on HUD)
-  { id: 'm7', title: '', text: '' },
   { id: 'm8', title: '', text: '' },
   // 9: zoom into Mediterranean, year stays 2023 (no regional year scrub)
   { id: 'm10', title: '', text: '' },

@@ -623,7 +623,7 @@ onUnmounted(() => {
           :style="{ backgroundColor: farmLegendDotColor }"
           aria-hidden="true"
         />
-        <span>Registered Bluefin Tuna Farm</span>
+        <span>ICCAT Registered Bluefin Tuna Farm</span>
       </div>
       <div class="map-legend-bar" :style="{ background: mapLegendGradient }" />
       <div class="map-legend-labels">

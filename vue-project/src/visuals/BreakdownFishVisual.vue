@@ -48,6 +48,16 @@ function easedTransitionProgress(t) {
 
 const fishTotals = computed(() => parse2023Counts(csvRaw))
 
+const STEP_SINGLE_FADE = 0
+const STEP_SINGLE_HOLD = 1
+const STEP_SINGLE_LINGER = 2
+const STEP_SINGLE_TO_WEEK = 3
+const STEP_WEEK_HOLD = 4
+const STEP_WEEK_LINGER = 5
+const STEP_WEEK_TO_YEAR = 6
+const STEP_YEAR_HOLD = 7
+const STEP_YEAR_LINGER = 8
+
 function drawImageFish(rect, alpha = 1) {
   if (!ctx || !fishImage) return
   ctx.save()
@@ -163,7 +173,7 @@ function draw() {
     yearTopLeft,
   } = computeFishBreakdownLayout(width, height, aspectRatio, fishTotals.value)
 
-  const baseStep = Math.max(0, Math.min(9, props.activeStep))
+  const baseStep = Math.max(STEP_SINGLE_FADE, Math.min(STEP_YEAR_LINGER, props.activeStep))
   const reduced = prefersReducedMotion.value
   const rawProgress = clamp01(props.stepProgress)
   const progress = reduced
@@ -172,18 +182,17 @@ function draw() {
       ? 0
       : rawProgress
 
-  if (baseStep === 0) {
-    // Step 0 is linger only: fish is fully visible (no fade); copy still drives scroll height.
+  if (baseStep === STEP_SINGLE_FADE) {
+    drawImageFish(singleCenterRect, progress)
+    return
+  }
+
+  if (baseStep === STEP_SINGLE_HOLD || baseStep === STEP_SINGLE_LINGER) {
     drawImageFish(singleCenterRect, 1)
     return
   }
 
-  if (baseStep >= 1 && baseStep <= 3) {
-    drawImageFish(singleCenterRect, 1)
-    return
-  }
-
-  if (baseStep === 4) {
+  if (baseStep === STEP_SINGLE_TO_WEEK) {
     const t = easedTransitionProgress(progress)
     const startMatchScale = singleCenterRect.h / Math.max(1, weekTopLeft.h)
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
@@ -201,12 +210,12 @@ function draw() {
     return
   }
 
-  if (baseStep === 5 || baseStep === 6) {
+  if (baseStep === STEP_WEEK_HOLD || baseStep === STEP_WEEK_LINGER) {
     drawImageGrid(weekLayout, 1)
     return
   }
 
-  if (baseStep === 7) {
+  if (baseStep === STEP_WEEK_TO_YEAR) {
     const t = easedTransitionProgress(progress)
     const startMatchScale = Math.max(1, weekTopLeft.h / Math.max(1, yearTopLeft.h))
     const sharedShrink = lerp(1, 1 / startMatchScale, t)
