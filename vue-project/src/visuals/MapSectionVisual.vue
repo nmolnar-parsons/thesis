@@ -623,13 +623,13 @@ onUnmounted(() => {
           :style="{ backgroundColor: farmLegendDotColor }"
           aria-hidden="true"
         />
-        <span>ICCAT Registered Bluefin Tuna Farm</span>
+        <span>Bluefin Tuna Farms</span>
       </div>
+      <div class="map-legend-scale-title">{{ CATCH_TONNE_LEGEND_TITLE }}</div>
       <div class="map-legend-bar" :style="{ background: mapLegendGradient }" />
       <div class="map-legend-labels">
         <span v-for="tick in CATCH_TONNE_LEGEND_TICKS" :key="tick">{{ tick }}</span>
       </div>
-      <div class="map-legend-scale-title">{{ CATCH_TONNE_LEGEND_TITLE }}</div>
     </aside>
 
     <div v-if="!tokenMissing" class="map-attrib-bar">

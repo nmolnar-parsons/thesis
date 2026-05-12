@@ -74,7 +74,7 @@
   /**
    * Default deep blue — map tuna ramp floor + continent fill + sticky surrounds,
    * stacked bluefin bar fill / legend swatch, streamgraph Wild capture + swatch,
-   * BreakdownFishVisual canvas backdrop.
+   * FishGridVisual canvas backdrop.
    */
   --color-default-blue: #071458;
   /** Streamgraph farmed ribbon + ICCAT farm map circles (TunaProductionStreamgraphVisual, MapSectionVisual). */

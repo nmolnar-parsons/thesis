@@ -33,7 +33,7 @@ const prefersReducedMotion = ref(false)
 /** Title opacity ramps with scroll; hits 1 at TITLE_FADE_END_RAW (before scrollRaw === 1). */
 const TITLE_FADE_START_RAW = 0.48
 const TITLE_FADE_END_RAW = 0.82
-const VISUAL_DIM_TARGET_OPACITY = 0.4
+const VISUAL_DIM_TARGET_OPACITY = 0.2
 
 function clamp01(x) {
   return Math.min(1, Math.max(0, x))

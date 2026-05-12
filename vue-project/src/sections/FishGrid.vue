@@ -2,7 +2,7 @@
 import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import CopyBlock from '../components/layout/CopyBlock.vue'
-import BreakdownFishVisual from '../visuals/BreakdownFishVisual.vue'
+import FishGridVisual from '../visuals/FishGridVisual.vue'
 
 defineProps({
   minimalMode: {
@@ -65,7 +65,7 @@ const steps = [
     <PinnedScrollSection :steps="steps" :scroll-offset="0.65">
       <template #graphic="graphicProps">
         <div class="fish-grid-graphic-wrap">
-          <BreakdownFishVisual
+          <FishGridVisual
             :active-step="graphicProps.activeStep"
             :step-progress="graphicProps.stepProgress"
           />

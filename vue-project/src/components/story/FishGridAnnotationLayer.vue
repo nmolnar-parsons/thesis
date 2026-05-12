@@ -27,7 +27,7 @@ const ANNOTATION_STEP1_FADE_START = 0.45
  * Forward-scroll guard: scrollama fires onStepEnter (activeStep flips) before onStepProgress resets,
  * so for one tick stepProgress still holds the previous step's tail (~1). Without gating, layerOpacity
  * paints the annotation at full alpha for that tick before snapping back to 0 and fading in — the flash.
- * Mirrors the pattern in BreakdownFishVisual.vue.
+ * Mirrors the pattern in FishGridVisual.vue.
  */
 const waitingForStepProgressReset = ref(false)
 const pendingStep = ref(-1)

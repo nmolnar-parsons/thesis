@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { computeFishBreakdownLayout, parse2023Counts } from '../composables/useFishBreakdownLayout.js'
 import { readColorDefaultBlue } from '../utils/readStoryColors.js'
 import csvRaw from '../data/toyosu_tuna_2023.csv?raw'
-import pacificFishUrl from './tuna-images/pacific-bluefin.png'
+import atlanticFishUrl from './tuna-images/atlantic_highres_noback.png'
 
 const props = defineProps({
   activeStep: { type: Number, default: 0 },
@@ -11,7 +11,7 @@ const props = defineProps({
 })
 
 const canvasRef = ref(null)
-const fishAspect = ref(2.3)
+const fishAspect = ref(2731 / 1537)
 const prefersReducedMotion = ref(false)
 const waitingForStepProgressReset = ref(false)
 const pendingStep = ref(-1)
@@ -165,13 +165,8 @@ function draw() {
   ctx.fillRect(0, 0, width, height)
 
   const aspectRatio = fishAspect.value
-  const {
-    singleCenterRect,
-    weekLayout,
-    yearLayout,
-    weekTopLeft,
-    yearTopLeft,
-  } = computeFishBreakdownLayout(width, height, aspectRatio, fishTotals.value)
+  const { singleCenterRect, weekLayout, yearLayout, weekTopLeft, yearTopLeft } =
+    computeFishBreakdownLayout(width, height, aspectRatio, fishTotals.value)
 
   const baseStep = Math.max(STEP_SINGLE_FADE, Math.min(STEP_YEAR_LINGER, props.activeStep))
   const reduced = prefersReducedMotion.value
@@ -240,7 +235,7 @@ async function loadFishAspect() {
   await new Promise((resolve, reject) => {
     img.onload = resolve
     img.onerror = reject
-    img.src = pacificFishUrl
+    img.src = atlanticFishUrl
   })
   if (img.naturalWidth && img.naturalHeight) {
     fishAspect.value = img.naturalWidth / img.naturalHeight
@@ -309,14 +304,13 @@ watch(
 </script>
 
 <template>
-  <div class="breakdown-fish-visual">
-
+  <div class="fish-grid-visual">
     <canvas ref="canvasRef" aria-hidden="true" />
   </div>
 </template>
 
 <style scoped>
-.breakdown-fish-visual {
+.fish-grid-visual {
   position: relative;
   width: 100%;
   height: 100%;
@@ -328,7 +322,7 @@ canvas {
   height: 100%;
 }
 
-.breakdown-fish-visual .visual-title {
+.fish-grid-visual .visual-title {
   position: absolute;
   top: clamp(0.75rem, 2.5vh, 2rem);
   left: 50%;

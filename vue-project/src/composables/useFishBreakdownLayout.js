@@ -1,5 +1,5 @@
 /**
- * Shared layout for BreakdownFishVisual canvas and FishGrid annotation overlay.
+ * Shared layout for FishGridVisual canvas and FishGrid annotation overlay.
  * Keep padding and grid math identical to the visual’s draw path.
  */
 
@@ -101,11 +101,12 @@ export function computeFishBreakdownLayout(width, height, fishAspect, fishTotals
   const gridLeft = edgePad
   const gridTop = contentTop
   const baseGap = Math.max(2, singleH * 0.04)
+  const weekContentHeight = contentHeight * 0.72
 
   const weekLayout = getGridLayout(
     fishTotals.weekFishCount,
     contentWidth,
-    contentHeight,
+    weekContentHeight,
     gridLeft,
     gridTop,
     singleW,
