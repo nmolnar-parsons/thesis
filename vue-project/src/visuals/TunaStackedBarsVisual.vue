@@ -132,7 +132,7 @@ const STAGES = [
         year: 2007,
         y1: 0,
         y2: 120000,
-        label: 'Conveyer Belt Sushi',
+        label: 'Cheaper, More Accessible Sushi',
       },
     ],
   },
