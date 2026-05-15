@@ -1,14 +1,13 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import Intro from './sections/Intro.vue'
-import Map from './sections/Map.vue'
-import FishGrid from './sections/FishGrid.vue'
-import ToyosuPrices from './sections/ToyosuPrices.vue'
-import StackedBars from './sections/StackedBars.vue'
-import Title from './sections/Title.vue'
-import CountryProduction from './sections/CountryProduction.vue'
-import DomesticImports from './sections/DomesticImports.vue'
-import Ending from './sections/Ending.vue'
+import Title from './sections/01-title/Title.vue'
+import FishGrid from './sections/02-fish-grid/FishGrid.vue'
+import ToyosuPrices from './sections/03-toyosu-prices/ToyosuPrices.vue'
+import StackedBars from './sections/04-stacked-bars/StackedBars.vue'
+import Map from './sections/05-map/Map.vue'
+import CountryProduction from './sections/06-country-production/CountryProduction.vue'
+import DomesticImports from './sections/07-domestic-imports/DomesticImports.vue'
+import Ending from './sections/08-ending/Ending.vue'
 
 const minimalMode = ref(false)
 const isFullscreen = ref(false)
@@ -108,14 +107,14 @@ onUnmounted(() => {
 
 <template>
   <main class="story-page">
-    <Intro />
+    <Title :minimal-mode="minimalMode" />
     <FishGrid :minimal-mode="minimalMode" />
     <!-- <ToyosuPrices v-if="!minimalMode" /> -->
     <StackedBars :minimal-mode="minimalMode" />
     <Map :minimal-mode="minimalMode" />
     <CountryProduction :minimal-mode="minimalMode" />
     <DomesticImports :minimal-mode="minimalMode"  />
-    <Ending />
+    <Ending :minimal-mode="minimalMode" />
     <button
       v-if="minimalMode"
       type="button"
