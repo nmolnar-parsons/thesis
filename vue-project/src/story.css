@@ -111,6 +111,20 @@
   --story-annotation-stacked-bars-label-font-size: 1.05rem;
   --story-annotation-stacked-bars-label-fill: #ffffff;
 
+  /*
+   * Pinned scrolly ( #fish-grid + #stacked-bars ): left padding tracks the y-axis line
+   * x-position from TunaStackedBarsVisual ( --story-scrolly-y-axis-inset, px, set on draw ).
+   * Fallback approximates drawChart margin.left before the chart has measured.
+   */
+  --story-scrolly-y-axis-inset-fallback: max(
+    0.75rem,
+    calc(
+      (34px + 17px) * var(--story-scale) + 1.1rem + (6px + 10px) * var(--story-scale) +
+        3.25rem * var(--story-scale)
+    )
+  );
+  --story-scrolly-copy-max-width: min(18rem, 26vw);
+
   /* Section shell (StorySection) */
   --story-section-padding-y: 2rem;
   --story-section-padding-x: 1rem;
@@ -166,6 +180,19 @@
     --story-scale: 1;
     --viz-chart-wrap-height: clamp(360px, 72vh, 640px);
     --viz-chart-wrap-max-height: 640px;
+  }
+}
+
+@media (max-width: 980px) {
+  :root {
+    --story-scrolly-y-axis-inset-fallback: max(
+      0.75rem,
+      calc(
+        (34px + 17px) * var(--story-scale) + 0.95rem + (6px + 10px) * var(--story-scale) +
+          2.5rem * var(--story-scale)
+      )
+    );
+    --story-scrolly-copy-max-width: min(28rem, calc(100% - 1.5rem));
   }
 }
 
@@ -294,10 +321,60 @@ html.story-hide-step-ui .scroll-step .step-card {
   pointer-events: none !important;
 }
 
+/*
+ * Pinned scrolly — #fish-grid + #stacked-bars: shared step copy column.
+ * Left inset = y-axis line from TunaStackedBarsVisual (CSS var) or formula fallback.
+ */
+#stacked-bars .scroll-step,
+#fish-grid .scroll-step {
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: var(--scroll-step-padding) 55% var(--scroll-step-padding)
+    var(--story-scrolly-y-axis-inset, var(--story-scrolly-y-axis-inset-fallback));
+}
+
+#stacked-bars .scroll-step .copy-block,
+#stacked-bars .scroll-step .step-card,
+#fish-grid .scroll-step .copy-block,
+#fish-grid .scroll-step .step-card {
+  max-width: var(--story-scrolly-copy-max-width);
+  width: 100%;
+  padding: var(--step-card-padding-y) 1.15rem;
+  border-radius: var(--step-card-radius);
+  background: var(--color-step-card-bg);
+  border: 1px solid var(--color-step-card-border);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.1);
+}
+
+#stacked-bars .step-column,
+#stacked-bars .scroll-step,
+#fish-grid .step-column,
+#fish-grid .scroll-step {
+  pointer-events: none;
+}
+
+#stacked-bars .scroll-step .copy-block,
+#stacked-bars .scroll-step .step-card,
+#fish-grid .scroll-step .copy-block,
+#fish-grid .scroll-step .step-card {
+  pointer-events: auto;
+}
+
+@media (max-width: 980px) {
+  #stacked-bars .scroll-step,
+  #fish-grid .scroll-step {
+    padding: var(--scroll-step-padding) clamp(0.75rem, 6vw, 2rem) var(--scroll-step-padding)
+      var(--story-scrolly-y-axis-inset, var(--story-scrolly-y-axis-inset-fallback));
+  }
+}
+
 /* Default layout for basic copy inside a 12-column SectionGrid. Override in section scoped styles when needed. */
 .story-copy {
   grid-column: 4 / span 6;
   align-self: center;
+  justify-self: center;
+  width: 100%;
+  max-width: min(36rem, 100%);
 }
 
 .story-copy--top {

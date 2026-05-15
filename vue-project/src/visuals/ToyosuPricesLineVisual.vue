@@ -24,6 +24,13 @@ const YEAR_END = 2023
 const inactiveStrokeOpacity = ref(0.34)
 const nonBluefinBaseOpacity = ref(0.34)
 const BLUEFIN_ATLANTIC_COLOR = '#17203D'
+
+/** Space below the plot for the x-axis (matches TunaProductionStreamgraphVisual). */
+const X_AXIS_BAND = 34
+const Y_AXIS_LABEL = 'Price per kg (JPY)'
+const Y_AXIS_TICK_PADDING = 10
+const Y_AXIS_TICK_SIZE = 6
+
 const NON_BLUEFIN_PALETTE = [
   '#ef4444',
   '#f97316',
@@ -42,7 +49,7 @@ const NON_BLUEFIN_PALETTE = [
 const BLUEFIN_SERIES_CONFIG = [
   {
     id: 'bluefin_mid',
-    label: 'Bluefin tuna - mid',
+    label: 'Bluefin tuna - median price',
     itemName: 'Bluefin tuna',
     metric: 'price_mid',
     color: BLUEFIN_ATLANTIC_COLOR,
@@ -60,7 +67,7 @@ const BLUEFIN_SERIES_CONFIG = [
   },
 ]
 
-const LEGEND_SERIES_IDS = new Set(['bluefin_mid', 'bigeye_mid'])
+const LEGEND_SERIES_IDS = new Set(['bluefin_mid'])
 const orderedSeries = computed(() => seriesRef.value)
 const legendSeries = computed(() => orderedSeries.value.filter((series) => LEGEND_SERIES_IDS.has(series.id)))
 
@@ -155,87 +162,135 @@ function drawChart() {
   if (!chartState || !chartState.series.length) return
 
   const host = hostRef.value
-  const width = host.clientWidth || 860
+  const width = host.clientWidth || 800
   const height = host.clientHeight || 520
   if (width < 20 || height < 20) return
   const storyScale = readStoryScale(wrapRef.value ?? host)
   const scalePx = (value) => value * storyScale
-  const margin = {
-    top: scalePx(34),
+  const baseMargin = {
+    top: scalePx(48),
     right: scalePx(34),
-    bottom: scalePx(46),
+    bottom: scalePx(48),
     left: scalePx(84),
   }
-  const innerWidth = width - margin.left - margin.right
-  const innerHeight = height - margin.top - margin.bottom
-  if (innerWidth < 20 || innerHeight < 20) return
+  const innerH = height - baseMargin.top - baseMargin.bottom
+  const xAxisBand = scalePx(X_AXIS_BAND)
+  if (innerH < xAxisBand + scalePx(40)) return
+
+  const chartHeight = innerH - xAxisBand
+
+  const yearMin = min(chartState.years) ?? YEAR_START
+  const yearMax = max(chartState.years) ?? YEAR_END
+  const yMinDomain = Math.max(0, chartState.yMin * 0.92)
+  const yMaxDomain = chartState.yMax * 1.08
+
+  const yScaleForMeasure = scaleLinear().domain([yMinDomain, yMaxDomain]).range([chartHeight, 0])
+  const yAxisForMeasure = () =>
+    axisLeft(yScaleForMeasure)
+      .ticks(7)
+      .tickSizeInner(scalePx(Y_AXIS_TICK_SIZE))
+      .tickPadding(scalePx(Y_AXIS_TICK_PADDING))
+      .tickFormat((d) => Number(d).toLocaleString())
 
   svg.attr('width', width).attr('height', height)
   svg.selectAll('*').remove()
 
-  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
-  const yearMin = min(chartState.years) ?? YEAR_START
-  const yearMax = max(chartState.years) ?? YEAR_END
+  const measureLayer = svg
+    .append('g')
+    .attr('class', 'axis-measure')
+    .attr('visibility', 'hidden')
+    .attr('aria-hidden', 'true')
+  const measureYAxis = measureLayer
+    .append('g')
+    .attr('class', 'story-chart-axis axis axis-y')
+    .call(yAxisForMeasure())
+  const maxTickLabelWidth = Math.max(
+    0,
+    ...measureYAxis
+      .selectAll('.tick text')
+      .nodes()
+      .map((node) => node.getBBox().width),
+  )
+  const axisLabelThickness =
+    measureLayer
+      .append('text')
+      .attr('class', 'story-chart-axis-label axis-label')
+      .text(Y_AXIS_LABEL)
+      .node()
+      ?.getBBox().height || 16
+  measureLayer.remove()
+
+  const axisGapTarget = baseMargin.right
+  const tickTextOffset = scalePx(Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING)
+  const labelToTickGap = axisGapTarget / 2
+  const labelCenterFromLeftEdge = axisGapTarget + axisLabelThickness / 2
+  const tickLabelsLeftEdge = axisGapTarget + axisLabelThickness + labelToTickGap
+  const margin = {
+    ...baseMargin,
+    left: Math.ceil(tickLabelsLeftEdge + tickTextOffset + maxTickLabelWidth),
+  }
+  const innerWidth = width - margin.left - margin.right
+  if (innerWidth < 20) return
+
   const xScale = scaleLinear().domain([yearMin, yearMax]).range([0, innerWidth])
-  const yScale = scaleLinear()
-    .domain([Math.max(0, chartState.yMin * 0.92), chartState.yMax * 1.08])
-    .range([innerHeight, 0])
+  const yScale = scaleLinear().domain([yMinDomain, yMaxDomain]).range([chartHeight, 0])
+  const yAxisDraw = () =>
+    axisLeft(yScale)
+      .ticks(7)
+      .tickSizeInner(scalePx(Y_AXIS_TICK_SIZE))
+      .tickPadding(scalePx(Y_AXIS_TICK_PADDING))
+      .tickFormat((d) => Number(d).toLocaleString())
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
+  const gPlot = g.append('g').attr('class', 'panel-top')
+  const gAxisX = g.append('g').attr('class', 'story-chart-axis axis axis-x')
 
   const lineGen = line()
     .x((d) => xScale(d.year))
     .y((d) => yScale(d.value))
+
+  const lineEndY = chartHeight
+  const hoverLabelY = scalePx(12)
+  const hoverLineStartY = hoverLabelY + scalePx(6)
 
   const hoverLine = g
     .append('line')
     .attr('class', 'hover-line')
     .attr('x1', 0)
     .attr('x2', 0)
-    .attr('y1', scalePx(20))
-    .attr('y2', innerHeight)
+    .attr('y1', hoverLineStartY)
+    .attr('y2', lineEndY)
     .style('opacity', 0)
 
   const hoverLabel = g
     .append('text')
     .attr('class', 'hover-line-label')
-    .attr('x', 0)
-    .attr('y', scalePx(14))
     .attr('text-anchor', 'middle')
+    .attr('x', 0)
+    .attr('y', hoverLabelY)
     .style('opacity', 0)
 
-  g.append('g')
-    .attr('class', 'axis axis-x')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(
-      axisBottom(xScale)
-        .tickValues(chartState.years)
-        .tickFormat((d) => `${Math.round(Number(d))}`),
-    )
+  gAxisX.attr('transform', `translate(0,${chartHeight})`).call(
+    axisBottom(xScale)
+      .tickValues(chartState.years)
+      .tickFormat((d) => `${Math.round(Number(d))}`),
+  )
 
-  g.append('g')
-    .attr('class', 'axis axis-y')
-    .call(
-      axisLeft(yScale)
-        .ticks(7)
-        .tickPadding(scalePx(10))
-        .tickFormat((d) => Number(d).toLocaleString()),
-    )
+  gPlot.append('g').attr('class', 'story-chart-axis axis axis-y').call(yAxisDraw())
 
-  g.append('text')
-    .attr('class', 'axis-label')
-    .attr('x', innerWidth / 2)
-    .attr('y', innerHeight + scalePx(38))
+  gPlot
+    .append('text')
+    .attr('class', 'story-chart-axis-label axis-label')
     .attr('text-anchor', 'middle')
-    .text('Year')
+    .attr(
+      'transform',
+      `translate(${labelCenterFromLeftEdge - margin.left}, ${chartHeight / 2}) rotate(-90)`,
+    )
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', '#334155')
+    .text(Y_AXIS_LABEL)
 
-  g.append('text')
-    .attr('class', 'axis-label')
-    .attr('transform', 'rotate(-90)')
-    .attr('x', -innerHeight / 2)
-    .attr('y', scalePx(-54))
-    .attr('text-anchor', 'middle')
-    .text('Price per kg (JPY)')
-
-  const seriesGroups = g
+  const seriesGroups = gPlot
     .selectAll('.series-group')
     .data(chartState.series, (d) => d.id)
     .join('g')
@@ -297,7 +352,7 @@ function drawChart() {
     .attr('x', 0)
     .attr('y', 0)
     .attr('width', innerWidth)
-    .attr('height', innerHeight)
+    .attr('height', chartHeight)
     .attr('fill', 'transparent')
     .on('mouseenter', function (event) {
       updateHoverLine(event)
@@ -416,51 +471,107 @@ onUnmounted(() => {
 <template>
   <div ref="wrapRef" class="linechart-wrap">
     <h1 class="visual-title linechart-title">Toyosu Tuna Prices</h1>
-    <aside class="legend" aria-label="Price series in chart">
-      <ul class="legend-list">
-        <li
-          v-for="series in legendSeries"
-          :key="series.id"
-          class="legend-item"
-          :data-series-id="series.id"
-          @mouseenter="!lockedSeriesId && setActiveSeries(series.id)"
-          @mouseleave="!lockedSeriesId && clearActiveSeries()"
-          @click="onLegendClick(series.id, $event)"
-        >
-          <span
-            class="swatch"
-            :style="{
-              '--swatch-color': series.color,
-              '--swatch-dasharray': series.dasharray || 'none',
-            }"
-          />
-          <span class="legend-label">{{ series.label }}</span>
-        </li>
-      </ul>
-    </aside>
-    <div ref="hostRef" class="d3-host" />
+    <div class="chart-plot-layer">
+      <div ref="hostRef" class="d3-host" />
+      <aside class="legend" aria-label="Price series in chart">
+        <ul class="legend-list">
+          <li
+            v-for="series in legendSeries"
+            :key="series.id"
+            class="legend-item"
+            :data-series-id="series.id"
+            @mouseenter="!lockedSeriesId && setActiveSeries(series.id)"
+            @mouseleave="!lockedSeriesId && clearActiveSeries()"
+            @click="onLegendClick(series.id, $event)"
+          >
+            <span
+              class="swatch"
+              :style="{
+                '--swatch-color': series.color,
+                '--swatch-dasharray': series.dasharray || 'none',
+              }"
+            />
+            <span class="legend-label">{{ series.label }}</span>
+          </li>
+        </ul>
+      </aside>
+    </div>
     <div ref="tooltipRef" class="tooltip" />
   </div>
 </template>
 
 <style scoped>
 .linechart-wrap {
-  --viz-height: clamp(
-    calc(320px * var(--story-scale)),
-    70vh,
-    calc(560px * var(--story-scale))
-  );
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  height: var(--viz-height);
-  max-height: calc(560px * var(--story-scale));
+  height: var(--viz-chart-wrap-height);
+  max-height: var(--viz-chart-wrap-max-height);
   overflow: hidden;
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);
 }
 
 .linechart-title {
+  flex-shrink: 0;
   margin-bottom: var(--space-visual-title-gap);
+}
+
+.chart-plot-layer {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.legend {
+  position: absolute;
+  right: var(--viz-chart-margin-right);
+  bottom: calc(
+    var(--viz-chart-margin-bottom) + var(--viz-x-axis-band) + var(--viz-legend-above-axis-gap)
+  );
+  z-index: 7;
+  width: auto;
+  max-width: min(calc(280px * var(--story-scale)), 46vw);
+  overflow: auto;
+  padding: var(--viz-legend-padding);
+  border: var(--viz-legend-border);
+  border-radius: 0;
+  background: var(--viz-legend-bg);
+  box-shadow: none;
+}
+
+.legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--viz-legend-list-gap);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.04rem 0.05rem;
+  font-size: var(--font-size-ui);
+  font-family: inherit;
+  line-height: var(--viz-legend-line-height);
+  color: #0f172a;
+  cursor: pointer;
+  transition: opacity 0.18s ease;
+  margin: 0;
+}
+
+.legend-item.is-active {
+  opacity: 1;
+  font-weight: var(--font-weight-ui);
+}
+
+.legend-item.is-inactive {
+  opacity: 0.32;
 }
 
 .d3-host {
@@ -472,25 +583,6 @@ onUnmounted(() => {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.linechart-wrap :deep(.axis text) {
-  fill: #475569;
-  font-size: var(--font-size-axis-tick);
-  font-family: var(--font-family-axis-tick);
-  font-weight: var(--font-weight-axis-tick);
-}
-
-.linechart-wrap :deep(.axis path),
-.linechart-wrap :deep(.axis line) {
-  stroke: #94a3b8;
-}
-
-.linechart-wrap :deep(.axis-label) {
-  fill: #334155;
-  font-size: var(--font-size-axis-title);
-  font-family: var(--font-family-axis-title);
-  font-weight: var(--font-weight-axis-title);
 }
 
 .linechart-wrap :deep(.series-line) {
@@ -526,49 +618,6 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.legend {
-  position: absolute;
-  right: 0.65rem;
-  bottom: 0.65rem;
-  z-index: 6;
-  width: auto;
-  max-width: min(calc(280px * var(--story-scale)), 46vw);
-  overflow: auto;
-  padding: 0.42rem 0.52rem;
-  border: 1px solid rgba(15, 23, 42, 0.3);
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.legend-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.28rem;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.12rem 0.05rem;
-  font-size: var(--font-size-ui);
-  font-family: inherit;
-  color: #0f172a;
-  cursor: pointer;
-  transition: opacity 0.18s ease;
-}
-
-.legend-item.is-active {
-  opacity: 1;
-  font-weight: var(--font-weight-ui);
-}
-
-.legend-item.is-inactive {
-  opacity: 0.32;
-}
-
 .swatch {
   width: 1rem;
   height: 0;
@@ -578,6 +627,10 @@ onUnmounted(() => {
   background: transparent;
   border-image: none;
   flex-shrink: 0;
+}
+
+.legend-label {
+  white-space: nowrap;
 }
 
 .tooltip {
@@ -597,14 +650,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 900px) {
-  .linechart-wrap {
-    --viz-height: clamp(260px, 58vh, 460px);
-    max-height: 460px;
-  }
-
   .legend {
-    right: 0.5rem;
-    bottom: 0.5rem;
     max-width: min(220px, 56vw);
   }
 }

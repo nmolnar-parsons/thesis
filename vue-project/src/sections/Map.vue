@@ -1,4 +1,6 @@
 <script setup>
+import CopyBlock from '../components/layout/CopyBlock.vue'
+import SectionGrid from '../components/layout/SectionGrid.vue'
 import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import MapSectionVisual from '../visuals/MapSectionVisual.vue'
@@ -33,6 +35,16 @@ const steps = [
 
 <template>
   <StorySection id="map" height="overscroll" width="full">
+    <SectionGrid v-if="!minimalMode" class="map-lead-grid" :columns="12" gap="1.25rem" align="start">
+      <div class="story-copy story-copy--top">
+        <CopyBlock title="Lorem ipsum dolor sit amet">
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus
+            posuere velit aliquet. Cras mattis consectetur purus sit amet fermentum. Curabitur blandit tempus porttitor.
+          </p>
+        </CopyBlock>
+      </div>
+    </SectionGrid>
     <PinnedScrollSection :steps="steps" :scroll-offset="0">
       <template #graphic="graphicProps">
         <MapSectionVisual
@@ -51,6 +63,11 @@ const steps = [
 </template>
 
 <style scoped>
+.map-lead-grid {
+  width: 100%;
+  padding-bottom: clamp(1rem, 4vh, 2.5rem);
+}
+
 :deep(#map.story-section) {
   padding-bottom: 32px;
 }

@@ -25,16 +25,22 @@ const props = defineProps({
 const hostRef = ref(null)
 const wrapRef = ref(null)
 const YEAR_START = 1965
-/** CSV codes combined into one chart series (Atlantic bluefin color). */
-const BLUEFIN_SOURCE_SPECIES = ['BFT', 'PBF', 'SBF']
-const BLUEFIN_CODE = 'BLUEFIN'
-const BLUEFIN_SPECIES = [BLUEFIN_CODE]
+/** FAO stock codes; stacked bottom → top (Atlantic, Pacific, Southern bluefin). */
+const BLUEFIN_STACK_SPECIES = ['BFT', 'PBF', 'SBF']
 const STAGGER_MS = 52
 /** Fixed y-scale (tonnes), matched with TunaProductionStreamgraphVisual. */
 const Y_AXIS_MAX = 120_000
 const Y_AXIS_LABEL = 'Global Bluefin Catch (tonnes)'
 const Y_AXIS_TICK_PADDING = 10
 const Y_AXIS_TICK_SIZE = 6
+
+/** Pinned scrolly copy `padding-left` aligns with this axis inset (see story.css). */
+const SCROLLY_Y_AXIS_INSET_VAR = '--story-scrolly-y-axis-inset'
+
+function publishScrollyYAxisInsetFromTuna(marginLeftPx) {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.setProperty(SCROLLY_Y_AXIS_INSET_VAR, `${marginLeftPx}px`)
+}
 
 /** Toggle single-line authoring inputs merged into SVG annotation labels while tuning copy. */
 const SHOW_ANNOTATION_TEXT_INPUT = false
@@ -91,16 +97,22 @@ function annotationLabelKey(stageIndex, annoIndex) {
 /** Reactive copy per STAGES annotation slot; seeded from optional `label` on each annotation. */
 const annotationLabelOverrides = reactive({})
 
-const SPECIES_META = [{ code: BLUEFIN_CODE, label: 'Bluefin Tuna' }]
+const SPECIES_META = [
+  { code: 'BFT', label: 'Atlantic' },
+  { code: 'PBF', label: 'Pacific' },
+  { code: 'SBF', label: 'Southern' },
+]
 
 function speciesBarFill(speciesCode) {
-  if (speciesCode === BLUEFIN_CODE) return readColorDefaultBlue()
+  if (speciesCode === 'BFT') return readColorDefaultBlue()
+  if (speciesCode === 'PBF') return '#1e40af'
+  if (speciesCode === 'SBF') return '#3b82f6'
   return '#94a3b8'
 }
 
 const STAGES = [
   {
-    species: [BLUEFIN_CODE],
+    species: [...BLUEFIN_STACK_SPECIES],
     yearRange: [1965, 1980],
     annotations: [
       {
@@ -113,7 +125,7 @@ const STAGES = [
     
   },
   {
-    species: [BLUEFIN_CODE],
+    species: [...BLUEFIN_STACK_SPECIES],
     yearRange: [1965, 1990],
     annotations: [
       {
@@ -125,7 +137,7 @@ const STAGES = [
     ],
   },
   {
-    species: [BLUEFIN_CODE],
+    species: [...BLUEFIN_STACK_SPECIES],
     yearRange: [1965, 2007],
     annotations: [
       {
@@ -137,7 +149,7 @@ const STAGES = [
     ],
   },
   {
-    species: [BLUEFIN_CODE],
+    species: [...BLUEFIN_STACK_SPECIES],
     yearRange: [1965, 2012],
     annotations: [
       {
@@ -149,7 +161,7 @@ const STAGES = [
     ],
   },
   {
-    species: [BLUEFIN_CODE],
+    species: [...BLUEFIN_STACK_SPECIES],
     annotations: [
       {
         year: 2023,
@@ -162,6 +174,10 @@ const STAGES = [
 ]
 
 const LAST_STAGE_INDEX = STAGES.length - 1
+/** Chart stage with yearRange ending at 2012 (`STAGES` index). */
+const STAGE_INDEX_2012 = STAGES.findIndex((s) => s.yearRange?.[1] === 2012)
+/** Pinned scroll step: hold on 2012 after reveal (`StackedBars.vue` `hf2-linger`). */
+const SCROLL_STEP_2012_LINGER = 5
 
 const FIRST_ANNOTATION_STAGE_IDX = STAGES.findIndex((s) => (s.annotations?.length ?? 0) > 0)
 
@@ -185,10 +201,12 @@ const annotationEditorRows = computed(() => {
   return rows
 })
 
-/** Scroll step 0 = intro copy only (empty chart). Step 1+ maps to STAGES[step - 1], clamped. */
+/** Scroll step 0 = intro copy only (empty chart). Step 1+ maps to STAGES, with one linger beat on 2012. */
 function scrollStepToChartStage(scrollStep) {
   if (scrollStep <= 0) return -1
-  return Math.min(scrollStep - 1, LAST_STAGE_INDEX)
+  if (scrollStep === SCROLL_STEP_2012_LINGER && STAGE_INDEX_2012 >= 0) return STAGE_INDEX_2012
+  const chartStep = scrollStep > SCROLL_STEP_2012_LINGER ? scrollStep - 1 : scrollStep
+  return Math.min(chartStep - 1, LAST_STAGE_INDEX)
 }
 
 const stageConfig = computed(() => {
@@ -242,16 +260,6 @@ function buildYearMatrix(rows) {
     maxY = Math.max(maxY, r.year)
     const k = `${r.species}\0${r.year}`
     bySy.set(k, (bySy.get(k) || 0) + r.value)
-  }
-  for (let y = YEAR_START; y <= maxY; y += 1) {
-    let sum = 0
-    for (const sp of BLUEFIN_SOURCE_SPECIES) {
-      sum += bySy.get(`${sp}\0${y}`) || 0
-    }
-    bySy.set(`${BLUEFIN_CODE}\0${y}`, sum)
-    for (const sp of BLUEFIN_SOURCE_SPECIES) {
-      bySy.delete(`${sp}\0${y}`)
-    }
   }
   const years = []
   for (let y = YEAR_START; y <= maxY; y++) years.push(y)
@@ -448,6 +456,7 @@ function drawChart() {
     ...baseMargin,
     left: Math.ceil(tickLabelsLeftEdge + tickTextOffset + maxTickLabelWidth),
   }
+  publishScrollyYAxisInsetFromTuna(margin.left)
   const innerW = width - margin.left - margin.right
   if (innerW < 20) return
 
@@ -467,19 +476,21 @@ function drawChart() {
     !stepChanged &&
     lastDrawDims.value.w === width &&
     lastDrawDims.value.h === height
+  const sameStageBeat = stepChanged && stageIdx >= 0 && stageIdx === priorStageIdx
+  const holdChartState = resizeOnly || sameStageBeat
 
   const shouldUseIntroPending = pendingIntroStagger.value
   const useStagger =
     introPrimed.value &&
     stageIdx >= 0 &&
     !isFinal &&
-    !resizeOnly &&
+    !holdChartState &&
     (stepForward || shouldUseIntroPending)
   if (pendingIntroStagger.value && stageIdx >= 0) pendingIntroStagger.value = false
 
   const useReverseStagger =
     introPrimed.value &&
-    !resizeOnly &&
+    !holdChartState &&
     stepBackward &&
     priorStageIdx >= 0 &&
     !priorIsFinal &&
@@ -501,11 +512,11 @@ function drawChart() {
     introPrimed.value &&
     isFinal &&
     stageIdx >= 0 &&
-    !resizeOnly &&
+    !holdChartState &&
     stepForward &&
     newYearsSorted.length > 0
 
-  const barDuration = stepChanged ? 1200 : 320
+  const barDuration = sameStageBeat ? 0 : stepChanged ? 1200 : 320
   const t = transition().duration(barDuration).ease(easeCubicInOut)
   /** Dedicated handle so annotation line + label share timing (bar-chart-race-style tweens). */
   const tAnnot = transition().duration(barDuration).ease(easeCubicInOut)
@@ -546,7 +557,7 @@ function drawChart() {
   gx.selectAll('text').attr('transform', null).style('text-anchor', 'middle')
 
   const gy = gMain.select('g.y-axis')
-  if (introPrimed.value && stepChanged) {
+  if (introPrimed.value && stepChanged && !sameStageBeat) {
     gy.transition(t).call(yAxisFn)
   } else {
     gy.call(yAxisFn)
@@ -694,7 +705,7 @@ function drawChart() {
   const isAnnotationFlyIntro =
     FIRST_ANNOTATION_STAGE_IDX >= 0 &&
     introPrimed.value &&
-    !resizeOnly &&
+    !holdChartState &&
     annotations.length > 0 &&
     annotationsWithText.length > 0 &&
     stageIdx === FIRST_ANNOTATION_STAGE_IDX &&
@@ -854,6 +865,9 @@ onUnmounted(() => {
   io = undefined
   svg?.remove()
   svg = null
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.removeProperty(SCROLLY_Y_AXIS_INSET_VAR)
+  }
 })
 </script>
 

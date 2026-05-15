@@ -27,6 +27,7 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   Angola: 'Africa',
   Argentina: 'Americas',
   Australia: 'Oceania',
+  Austria: 'Europe',
   Barbados: 'Americas',
   Belize: 'Americas',
   Benin: 'Africa',
@@ -47,6 +48,7 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   "Côte d'Ivoire": 'Africa',
   Dominica: 'Americas',
   'Dominican Republic': 'Americas',
+  Denmark: 'Europe',
   Ecuador: 'Americas',
   Egypt: 'Africa',
   'El Salvador': 'Americas',
@@ -54,8 +56,10 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   'Faroe Islands': 'Europe',
   Fiji: 'Oceania',
   France: 'Europe',
+  'French Polynesia': 'Oceania',
   Gabon: 'Africa',
   Gambia: 'Africa',
+  Germany: 'Europe',
   Georgia: 'Asia',
   Ghana: 'Africa',
   Gibraltar: 'Europe',
@@ -74,9 +78,11 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   Japan: 'Asia',
   Kiribati: 'Oceania',
   Croatia: 'Europe',
+  Cyprus: 'Asia',
   'South Korea': 'Asia',
   Liberia: 'Africa',
   Libya: 'Africa',
+  Maldives: 'Asia',
   Malta: 'Europe',
   'Marshall Islands': 'Oceania',
   Mauritania: 'Africa',
@@ -106,8 +112,10 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   Samoa: 'Oceania',
   'Sao Tome and Principe': 'Africa',
   Senegal: 'Africa',
+  Serbia: 'Europe',
   Seychelles: 'Africa',
   'Sierra Leone': 'Africa',
+  Singapore: 'Asia',
   'Solomon Islands': 'Oceania',
   'South Africa': 'Africa',
   Spain: 'Europe',
@@ -116,6 +124,7 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   'Syrian Arab Republic': 'Asia',
   Taiwan: 'Asia',
   Thailand: 'Asia',
+  Tokelau: 'Oceania',
   Togo: 'Africa',
   Tonga: 'Oceania',
   'Trinidad and Tobago': 'Americas',
@@ -134,6 +143,11 @@ export const CANONICAL_COUNTRY_TO_CONTINENT = {
   'Virgin Islands, British': 'Americas',
   'Wallis and Futuna': 'Oceania',
 }
+
+/** Lowercased canonical label -> canonical key (matches NOAA-style ALL CAPS and other casing). */
+const LOWER_KEY_TO_CANONICAL = Object.freeze(
+  Object.fromEntries(Object.keys(CANONICAL_COUNTRY_TO_CONTINENT).map((k) => [k.toLowerCase(), k]))
+)
 
 /** Normalized alias string -> canonical name (keys must be normalizeCountry output, lowercased for lookup). */
 const ALIAS_LOWER_TO_CANONICAL = {
@@ -170,9 +184,16 @@ const ALIAS_LOWER_TO_CANONICAL = {
   venezuela: 'Venezuela, Bolivarian Republic of',
   'venezuela bolivarian republic of': 'Venezuela, Bolivarian Republic of',
   turkiye: 'Turkey',
+  'cook is': 'Cook Islands',
+  'marshall is': 'Marshall Islands',
+  'maldive is': 'Maldives',
+  'st vincent grenadine': 'Saint Vincent and the Grenadines',
+  'tokelau is': 'Tokelau',
+  'western samoa': 'Samoa',
 }
 
 export const COUNTRY_COLOR_OVERRIDES = {
+  Unreported: '#64748b',
   'South Africa': '#fb8c00',
   Australia: '#ec407a',
   'New Zealand': '#f48fb1',
@@ -180,7 +201,12 @@ export const COUNTRY_COLOR_OVERRIDES = {
 }
 
 export function normalizeCountry(country) {
-  return String(country).replace(/\./g, '').replace(/\s+/g, ' ').trim()
+  return String(country)
+    .replace(/\./g, ' ')
+    .replace(/&/g, ' and ')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function resolveCanonicalCountry(country) {
@@ -192,6 +218,8 @@ export function resolveCanonicalCountry(country) {
   if (Object.prototype.hasOwnProperty.call(CANONICAL_COUNTRY_TO_CONTINENT, underscored)) {
     return n.replace(/_/g, ' ')
   }
+  const canonFromLower = LOWER_KEY_TO_CANONICAL[n.toLowerCase()]
+  if (canonFromLower) return canonFromLower
   const lower = n.toLowerCase()
   if (Object.prototype.hasOwnProperty.call(ALIAS_LOWER_TO_CANONICAL, lower)) {
     return ALIAS_LOWER_TO_CANONICAL[lower]

@@ -1,15 +1,21 @@
 <script setup>
+import { scaleBand, scaleLinear } from 'd3-scale'
+import { select } from 'd3-selection'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import gtaFirmsTunaCsvRaw from '../data/GTA_FIRMs_tuna_cleaned_grouped.csv?raw'
 import tunaCatchData5degUrl from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?url'
-import tunaCatchData5degRaw from '../data/tuna_data/cwp-grid-5deg-catch-bluefin.geojson?raw'
 import iccatFishFarmsCentroidsUrl from '../data/iccat_fish_farms_centroids.geojson?url'
 import { readColorDefaultBlue, readColorTunaFarmed } from '../utils/readStoryColors.js'
 import { readStoryScale } from '../utils/readStoryScale.js'
 
 const YEAR_START = 1965
 const YEAR_END = 2023
+/** FAO bluefin stock codes; summed for HUD totals (matches TunaStackedBarsVisual). */
+const BLUEFIN_STACK_SPECIES = ['BFT', 'PBF', 'SBF']
+/** Fixed y-scale (tonnes), matched with TunaStackedBarsVisual. */
+const HUD_CHART_Y_MAX = 120_000
 const DEFAULT_PROJECTION = 'naturalEarth'
 /** 1 bluefin ≈ 250 kg = 1/4 tonne. Converts head-count (`count_${y}`) to metric tonnes. */
 const COUNT_TO_TONNE = 1 / 4
@@ -143,82 +149,122 @@ const props = defineProps({
 const MEDITERRANEAN_ZOOM_FILLER =
   'Med Filler'
 const MEDITERRANEAN_FARMS_FILLER =
-  'Med Filler Farms'
+  'The Mediterranean and the countries around it are leading the way in Bluefin farming. Each dot is a registered bluefin farm: together, they have the capacity to produce 80,000 tonnes of Bluefin in a year.'
 const LINGER_2023_FILLER = 'filler for 2023 linger'
 const DEFAULT_FILLER = 'default filler'
 
 const mapRef = ref(null)
+const miniChartRef = ref(null)
 const mapReady = ref(false)
 const tokenMissing = ref(false)
 const farmLegendVisible = ref(false)
 let map = null
 let resizeObserver = null
+let miniChartResizeObserver = null
 let activeCameraKey = ''
+let hudChartLayoutRaf = null
+
+/**
+ * Scrollama fires onStepEnter before onStepProgress matches the new step.
+ * Forward: stale progress ≈ 1 → timeline jumps ahead; gate to 0 until progress resets low.
+ * Backward: stale progress ≈ 0 → timeline jumps behind; gate to 1 until progress resets high.
+ */
+const scrollStepGate = ref(null) // null | 'forward' | 'backward'
+const pendingStep = ref(-1)
+
+const hudChartYears = []
+for (let y = YEAR_START; y <= YEAR_END; y += 1) {
+  hudChartYears.push(y)
+}
 
 function clamp01(v) {
   return Math.min(1, Math.max(0, v))
 }
 
-const currentYear = computed(() => {
-  const step = props.activeStep
-  const prog = props.stepProgress
-  if (step > STEP_YEAR_FULLVIEW_END) {
-    return YEAR_END
+watch(
+  () => props.activeStep,
+  (nextStep, prevStep) => {
+    if (nextStep === prevStep) return
+    pendingStep.value = nextStep
+    scrollStepGate.value = nextStep > prevStep ? 'forward' : 'backward'
+  },
+)
+
+watch(
+  () => props.stepProgress,
+  (nextProgress) => {
+    const p = clamp01(nextProgress)
+    if (scrollStepGate.value === 'forward' && p <= 0.05) {
+      scrollStepGate.value = null
+    } else if (scrollStepGate.value === 'backward' && p >= 0.95) {
+      scrollStepGate.value = null
+    }
+  },
+)
+
+const gatedStepProgress = computed(() => {
+  if (props.activeStep !== pendingStep.value || scrollStepGate.value == null) {
+    return clamp01(props.stepProgress)
   }
+  if (scrollStepGate.value === 'forward') return 0
+  return 1
+})
+
+function timelineYearFloat(step, prog) {
+  if (step > STEP_YEAR_FULLVIEW_END) return YEAR_END
   const spanSteps = Math.max(1, STEP_YEAR_FULLVIEW_END + 1)
   const timelinePos = step + prog
   if (timelinePos >= spanSteps) return YEAR_END
   const yearT = timelinePos / spanSteps
   const span = YEAR_END - YEAR_START
-  return Math.min(YEAR_END, Math.max(YEAR_START, Math.round(YEAR_START + yearT * span)))
-})
+  return Math.min(YEAR_END, Math.max(YEAR_START, YEAR_START + yearT * span))
+}
+
+const timelineYear = computed(() => timelineYearFloat(props.activeStep, gatedStepProgress.value))
+
+const currentYear = computed(() => Math.round(timelineYear.value))
 
 const mapTitle = computed(() => `Where Bluefin Was Caught in ${currentYear.value}`)
 
-function parseYearlyTotals5deg() {
-  const empty = new Map()
-  try {
-    const parsed = JSON.parse(tunaCatchData5degRaw)
-    const features = Array.isArray(parsed?.features) ? parsed.features : []
-    const yearly = new Map()
-    for (let y = YEAR_START; y <= YEAR_END; y += 1) {
-      // `combinedCount`/`combinedTonnes` fold the other dimension via the 1 bluefin = 1/4 tonne
-      // conversion so cells reporting only tonnes (or only count) for a given year still register.
-      yearly.set(y, { count: 0, tonnes: 0, combinedCount: 0, combinedTonnes: 0 })
-    }
-    for (const feature of features) {
-      const fp = feature?.properties || {}
-      for (let y = YEAR_START; y <= YEAR_END; y += 1) {
-        const count = Number(fp[`count_${y}`]) || 0
-        const tonnes = Number(fp[`tonne_${y}`]) || 0
-        const entry = yearly.get(y)
-        entry.count += count
-        entry.tonnes += tonnes
-        entry.combinedCount += count + tonnes * TONNE_TO_COUNT
-        entry.combinedTonnes += tonnes + count * COUNT_TO_TONNE
-      }
-    }
-    return yearly
-  } catch (error) {
-    console.warn('MapSectionVisual: failed to parse 5deg yearly totals.', error)
-    return empty
+function parseGtaFirmsCsv(text) {
+  const lines = text.trim().split(/\r?\n/)
+  const rows = []
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i]
+    if (!line) continue
+    const parts = line.split(',')
+    if (parts.length < 3) continue
+    const species = parts[0]
+    const year = Number(parts[1])
+    const value = Number.parseFloat(parts[2])
+    if (!Number.isFinite(year) || !Number.isFinite(value)) continue
+    rows.push({ species, year, value })
   }
+  return rows
 }
 
-const yearlyTotals5deg = parseYearlyTotals5deg()
+function buildGtaFirmsYearlyTonnes(rows) {
+  const yearly = new Map()
+  for (let y = YEAR_START; y <= YEAR_END; y += 1) {
+    yearly.set(y, 0)
+  }
+  for (const row of rows) {
+    if (row.year < YEAR_START || row.year > YEAR_END) continue
+    if (!BLUEFIN_STACK_SPECIES.includes(row.species)) continue
+    yearly.set(row.year, (yearly.get(row.year) || 0) + row.value)
+  }
+  return yearly
+}
 
-const countRange = computed(() => {
-  const values = Array.from(yearlyTotals5deg.values(), (d) => d.combinedCount)
+const gtaFirmsYearlyTonnes = buildGtaFirmsYearlyTonnes(parseGtaFirmsCsv(gtaFirmsTunaCsvRaw))
+
+const currentYearTonnes = computed(() => gtaFirmsYearlyTonnes.get(currentYear.value) || 0)
+
+const tonnesRange = computed(() => {
+  const values = Array.from(gtaFirmsYearlyTonnes.values())
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 1)
   return { min, max }
-})
-
-const currentYearTotals = computed(() => {
-  const cy = currentYear.value
-  const entry =
-    yearlyTotals5deg.get(cy) || { count: 0, tonnes: 0, combinedCount: 0, combinedTonnes: 0 }
-  return { totalCount: entry.combinedCount }
 })
 
 function normalize(value, min, max) {
@@ -232,8 +278,8 @@ function colorByIntensity(intensity) {
   return `rgb(${channel}, ${channel}, ${channel})`
 }
 
-const countNumberColor = computed(() => {
-  const t = normalize(currentYearTotals.value.totalCount, countRange.value.min, countRange.value.max)
+const tonnesNumberColor = computed(() => {
+  const t = normalize(currentYearTonnes.value, tonnesRange.value.min, tonnesRange.value.max)
   return colorByIntensity(t)
 })
 
@@ -268,8 +314,161 @@ function overlayOpacity() {
   return showBasinCallout ? 1 : 0
 }
 
-function formatCount(v) {
-  return Math.round(v).toLocaleString()
+function formatTonnes(v) {
+  return Math.round(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
+function yearCenterX(xScale, year) {
+  const x = xScale(String(year))
+  if (x == null) return null
+  return x + xScale.bandwidth() / 2
+}
+
+function buildHudMarkerXScale(xScale) {
+  const xStart = yearCenterX(xScale, YEAR_START)
+  const xEnd = yearCenterX(xScale, YEAR_END)
+  if (xStart == null || xEnd == null) return null
+  return scaleLinear().domain([YEAR_START, YEAR_END]).range([xStart, xEnd]).clamp(true)
+}
+
+function hudMiniChartLayout(el) {
+  const width = el.clientWidth
+  const height = el.clientHeight
+  if (width < 24 || height < 16) return null
+
+  const margin = { top: 2, right: 2, bottom: 2, left: 2 }
+  const innerW = width - margin.left - margin.right
+  const innerH = height - margin.top - margin.bottom
+  if (innerW < 16 || innerH < 8) return null
+
+  const yScale = scaleLinear().domain([0, HUD_CHART_Y_MAX]).range([innerH, 0])
+  const xScale = scaleBand().domain(hudChartYears.map(String)).range([0, innerW]).padding(0.12)
+  const markerXScale = buildHudMarkerXScale(xScale)
+  if (!markerXScale) return null
+
+  return {
+    width,
+    height,
+    margin,
+    innerH,
+    innerW,
+    xScale,
+    yScale,
+    markerXScale,
+    baselineY: yScale(0),
+    barWidth: xScale.bandwidth(),
+  }
+}
+
+function hudMiniChartBars() {
+  return hudChartYears.map((year) => ({
+    year,
+    tonnes: gtaFirmsYearlyTonnes.get(year) || 0,
+  }))
+}
+
+function cancelHudChartLayoutRaf() {
+  if (hudChartLayoutRaf != null) {
+    cancelAnimationFrame(hudChartLayoutRaf)
+    hudChartLayoutRaf = null
+  }
+}
+
+function scheduleHudMiniChartLayout() {
+  cancelHudChartLayoutRaf()
+  hudChartLayoutRaf = requestAnimationFrame(() => {
+    hudChartLayoutRaf = null
+    layoutHudMiniChart()
+  })
+}
+
+function initHudMiniChart() {
+  const el = miniChartRef.value
+  if (!el || props.minimalMode) return
+  if (!select(el).select('svg.hud-mini-chart-svg').empty()) return
+
+  const svg = select(el)
+    .append('svg')
+    .attr('class', 'hud-mini-chart-svg')
+    .attr('role', 'presentation')
+    .attr('focusable', 'false')
+
+  const g = svg.append('g').attr('class', 'hud-mini-chart-inner')
+  g.append('g')
+    .attr('class', 'hud-mini-bars')
+    .selectAll('rect')
+    .data(hudMiniChartBars(), (d) => d.year)
+    .join('rect')
+    .attr('class', 'hud-bar')
+  g.append('line').attr('class', 'hud-year-marker')
+}
+
+function layoutHudMiniChart() {
+  const el = miniChartRef.value
+  if (!el || props.minimalMode) return
+
+  initHudMiniChart()
+
+  const layout = hudMiniChartLayout(el)
+  if (!layout) return
+
+  const { width, height, margin, xScale, yScale, baselineY, barWidth } = layout
+
+  const svg = select(el).select('svg.hud-mini-chart-svg')
+  svg.attr('width', width).attr('height', height)
+
+  const gInner = svg.select('g.hud-mini-chart-inner').attr('transform', `translate(${margin.left},${margin.top})`)
+
+  gInner.select('g.hud-mini-bars').selectAll('rect.hud-bar').each(function (d) {
+    const bar = select(this)
+    const x = xScale(String(d.year))
+    const y = yScale(d.tonnes)
+    bar
+      .attr('x', x)
+      .attr('width', barWidth)
+      .attr('y', y)
+      .attr('height', Math.max(0, baselineY - y))
+  })
+
+  updateHudYearMarker()
+}
+
+function updateHudYearMarker() {
+  const el = miniChartRef.value
+  if (!el || props.minimalMode) return
+
+  const layout = hudMiniChartLayout(el)
+  if (!layout) return
+
+  const marker = select(el).select('line.hud-year-marker')
+  if (marker.empty()) return
+
+  const x = layout.markerXScale(timelineYear.value)
+  if (!Number.isFinite(x)) return
+
+  marker.attr('y1', 0).attr('y2', layout.innerH).attr('x1', x).attr('x2', x)
+}
+
+function setupHudMiniChart() {
+  if (props.minimalMode) return
+  nextTick(() => {
+    layoutHudMiniChart()
+    const el = miniChartRef.value
+    if (!el || miniChartResizeObserver) return
+    miniChartResizeObserver = new ResizeObserver(() => {
+      scheduleHudMiniChartLayout()
+    })
+    miniChartResizeObserver.observe(el)
+  })
+}
+
+function teardownHudMiniChart() {
+  cancelHudChartLayoutRaf()
+  miniChartResizeObserver?.disconnect()
+  miniChartResizeObserver = null
+  if (miniChartRef.value) {
+    select(miniChartRef.value).selectAll('*').remove()
+  }
 }
 
 const tunaColorExpression = computed(() => {
@@ -549,6 +748,7 @@ onMounted(() => {
     syncFarmCirclesVisibility()
   })
   if (mapRef.value) resizeObserver.observe(mapRef.value)
+  setupHudMiniChart()
 })
 
 watch(
@@ -564,9 +764,25 @@ watch(currentYear, () => {
   syncFarmCirclesVisibility()
 })
 
+watch(
+  () => [timelineYear.value, props.activeStep, gatedStepProgress.value],
+  () => {
+    updateHudYearMarker()
+  },
+)
+
+watch(
+  () => props.minimalMode,
+  (minimal) => {
+    if (minimal) teardownHudMiniChart()
+    else setupHudMiniChart()
+  },
+)
+
 onUnmounted(() => {
   cancelFarmCirclesFade()
   farmCirclesFadeTargetShow = null
+  teardownHudMiniChart()
   resizeObserver?.disconnect()
   resizeObserver = null
   if (map) map.remove()
@@ -582,9 +798,10 @@ onUnmounted(() => {
     <div v-if="!minimalMode" class="hud-row">
       <div class="metrics-card">
         <p class="metric-line">
-          <span class="metric-caption">Total fish caught:</span>
-          <span class="metric-value" :style="{ color: countNumberColor }">{{ formatCount(currentYearTotals.totalCount) }}</span>
+          <span class="metric-caption">Global bluefin catch (tonnes):</span>
+          <span class="metric-value" :style="{ color: tonnesNumberColor }">{{ formatTonnes(currentYearTonnes) }}</span>
         </p>
+        <div ref="miniChartRef" class="hud-mini-chart" aria-hidden="true" />
         <p v-if="narrativeCopy" class="narrative-copy">{{ narrativeCopy }}</p>
       </div>
     </div>
@@ -623,7 +840,7 @@ onUnmounted(() => {
           :style="{ backgroundColor: farmLegendDotColor }"
           aria-hidden="true"
         />
-        <span>Bluefin Tuna Farms</span>
+        <span>ICCAT Registered Bluefin Tuna Farms</span>
       </div>
       <div class="map-legend-scale-title">{{ CATCH_TONNE_LEGEND_TITLE }}</div>
       <div class="map-legend-bar" :style="{ background: mapLegendGradient }" />
@@ -864,6 +1081,31 @@ onUnmounted(() => {
 
 .metric-value {
   font-weight: var(--font-weight-ui);
+}
+
+.hud-mini-chart {
+  margin-top: 0.45rem;
+  width: 100%;
+  height: calc(52px * var(--story-scale));
+  min-height: 40px;
+}
+
+.hud-mini-chart :deep(.hud-mini-chart-svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hud-mini-chart :deep(.hud-bar) {
+  fill: var(--color-default-blue);
+  opacity: 0.92;
+}
+
+.hud-mini-chart :deep(.hud-year-marker) {
+  stroke: var(--story-annotation-stacked-bars-stroke);
+  stroke-width: calc(3.5px * var(--story-scale));
+  stroke-dasharray: 6 4;
+  pointer-events: none;
 }
 
 .callout-layer {

@@ -1,5 +1,6 @@
 <script setup>
 import CopyBlock from '../components/layout/CopyBlock.vue'
+import SectionGrid from '../components/layout/SectionGrid.vue'
 import PinnedScrollSection from '../components/story/PinnedScrollSection.vue'
 import StorySection from '../components/story/StorySection.vue'
 import TunaStackedBarsVisual from '../visuals/TunaStackedBarsVisual.vue'
@@ -35,7 +36,12 @@ const steps = [
   {
     id: 'hf2',
     title: '',
-    text: 'Two years later, the global catch had fallen by 80%. Not for any change in demand — sushi remained popular - but a historic level of overfishing. The population was at risk of complete collapse. Strict management measures - effectively a lowering of quotas - were put in place.',
+    text: 'Two years later, the global catch had fallen by 80%. Not for any change in demand — sushi remained popular - but a historic level of overfishing. The population was at risk of complete collapse. Strict management measures were put in place.',
+  },
+  {
+    id: 'hf2-linger',
+    title: '',
+    text: '',
   },
   {
     id: 'hf3',
@@ -57,6 +63,17 @@ const steps = [
 
 <template>
   <StorySection id="stacked-bars" height="overscroll" width="full">
+    <SectionGrid v-if="!minimalMode" class="stacked-bars-lead-grid" :columns="12" gap="1.25rem" align="start">
+      <div class="story-copy story-copy--top">
+        <CopyBlock title="Lorem ipsum dolor sit amet">
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
+            dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+            ea commodo consequat.
+          </p>
+        </CopyBlock>
+      </div>
+    </SectionGrid>
     <div class="stacked-bars-scrolly">
       <PinnedScrollSection :steps="steps" :scroll-offset="0.72">
         <template #graphic="graphicProps">
@@ -74,6 +91,11 @@ const steps = [
 </template>
 
 <style scoped>
+.stacked-bars-lead-grid {
+  width: 100%;
+  padding-bottom: clamp(1rem, 4vh, 2.5rem);
+}
+
 .stacked-bars-scrolly {
   width: 100%;
 }
@@ -100,46 +122,5 @@ const steps = [
 
 #stacked-bars :deep(.sticky-graphic > *) {
   width: 100%;
-}
-
-#stacked-bars :deep(.scroll-step) {
-  justify-content: flex-start;
-  align-items: flex-start;
-  padding-left: clamp(0.75rem, 4vw, 2.5rem);
-  padding-right: 55%;
-}
-
-#stacked-bars :deep(.scroll-step .copy-block),
-#stacked-bars :deep(.step-card) {
-  max-width: min(22rem, 33vw);
-  width: 100%;
-  padding: var(--step-card-padding-y) 1.15rem;
-  border-radius: var(--step-card-radius);
-  background: var(--color-step-card-bg);
-  border: 1px solid var(--color-step-card-border);
-  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
-}
-
-/* Let chart hover interactions pass through the step overlay,
-   while keeping copy cards interactive. */
-#stacked-bars :deep(.step-column),
-#stacked-bars :deep(.scroll-step) {
-  pointer-events: none;
-}
-
-#stacked-bars :deep(.scroll-step .copy-block),
-#stacked-bars :deep(.step-card) {
-  pointer-events: auto;
-}
-
-@media (max-width: 980px) {
-  #stacked-bars :deep(.scroll-step) {
-    padding-right: clamp(0.75rem, 6vw, 2rem);
-  }
-
-  #stacked-bars :deep(.scroll-step .copy-block),
-  #stacked-bars :deep(.step-card) {
-    max-width: min(32rem, calc(100% - 1.5rem));
-  }
 }
 </style>

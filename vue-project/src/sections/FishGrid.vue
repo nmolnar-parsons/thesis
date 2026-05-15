@@ -34,17 +34,17 @@ const steps = [
   },
   {
     id: 'fish-grid-week-hold',
-    title: 'A week of fish',
-    text: 'Each icon is still one fish—now enough to fill a representative week in the data.',
+    title: '',
+    text: "In 2023, Tokyo's Toyosu Fish Market sold, on average, 156 bluefin tuna per week.",
   },
   {
     id: 'fish-grid-week-linger',
-    title: 'A week of fish',
+    title: '',
     text: 'Stay on the week grid while the copy settles.',
   },
   {
     id: 'fish-grid-week-to-year',
-    title: 'A week of fish',
+    title: '',
     text: 'Zoom out again to reveal roughly a full year of fish in the dataset.',
   },
   {
@@ -92,34 +92,6 @@ const steps = [
   background: #17203d;
 }
 
-#fish-grid :deep(.scroll-step) {
-  justify-content: flex-start;
-  align-items: flex-start;
-  padding-left: clamp(0.75rem, 4vw, 2.5rem);
-  padding-right: 55%;
-}
-
-#fish-grid :deep(.scroll-step .copy-block),
-#fish-grid :deep(.step-card) {
-  max-width: min(22rem, 33vw);
-  width: 100%;
-  background: var(--color-step-card-bg);
-  border: 1px solid var(--color-step-card-border);
-  border-radius: var(--step-card-radius);
-  padding: var(--step-card-padding-y) 1.15rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
-}
-
-#fish-grid :deep(.step-column),
-#fish-grid :deep(.scroll-step) {
-  pointer-events: none;
-}
-
-#fish-grid :deep(.scroll-step .copy-block),
-#fish-grid :deep(.step-card) {
-  pointer-events: auto;
-}
-
 .fish-grid-step-slot {
   display: block;
   width: 0;
@@ -127,16 +99,5 @@ const steps = [
   overflow: hidden;
   visibility: hidden;
   pointer-events: none;
-}
-
-@media (max-width: 980px) {
-  #fish-grid :deep(.scroll-step) {
-    padding-right: clamp(0.75rem, 6vw, 2rem);
-  }
-
-  #fish-grid :deep(.scroll-step .copy-block),
-  #fish-grid :deep(.step-card) {
-    max-width: min(32rem, calc(100% - 1.5rem));
-  }
 }
 </style>

@@ -15,7 +15,7 @@ defineProps({
 <template>
   <StorySection id="toyosu-prices" height="min-screen" width="full">
     <SectionGrid :columns="12" gap="1.25rem" align="start">
-      <div v-if="!minimalMode" class="story-copy story-copy--top toyosu-copy-top">
+      <div v-if="!minimalMode" class="story-copy story-copy--top">
         <CopyBlock title="Why do we catch so much tuna">
           <p>
             it's really expensive!
@@ -32,22 +32,12 @@ defineProps({
 </template>
 
 <style scoped>
-.toyosu-copy-top {
-  grid-column: 3 / span 8;
-}
-
 .toyosu-visual {
   grid-column: 1 / span 12;
 }
 
-.toyosu-copy-bottom {
-  grid-column: 3 / span 8;
-}
-
 @media (max-width: 980px) {
-  .toyosu-copy-top,
-  .toyosu-visual,
-  .toyosu-copy-bottom {
+  .toyosu-visual {
     grid-column: 1 / -1;
   }
 }
