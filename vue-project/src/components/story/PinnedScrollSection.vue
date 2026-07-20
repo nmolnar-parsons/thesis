@@ -39,12 +39,14 @@ onMounted(() => {
         class="scroll-step"
         :class="{ active: index === activeStep }"
       >
-        <slot name="step" :step="step" :index="index" :active-step="activeStep">
-          <div class="step-card">
-            <h3>{{ step.title }}</h3>
-            <p>{{ step.text }}</p>
-          </div>
-        </slot>
+        <div v-show="step.visible !== false" class="step-content">
+          <slot name="step" :step="step" :index="index" :active-step="activeStep">
+            <div class="step-card">
+              <h3>{{ step.title }}</h3>
+              <p>{{ step.text }}</p>
+            </div>
+          </slot>
+        </div>
       </article>
     </div>
   </section>
@@ -84,7 +86,7 @@ onMounted(() => {
   padding: var(--step-card-padding-y) var(--step-card-padding-x);
   border-radius: var(--step-card-radius);
   background: var(--color-step-card-bg);
-  border: 1px solid var(--color-step-card-border);
+  border: var(--color-step-card-border);
   opacity: 0.45;
   transition: opacity 220ms ease;
 }

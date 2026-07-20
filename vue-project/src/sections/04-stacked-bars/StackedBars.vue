@@ -17,46 +17,55 @@ const steps = [
     id: 'chart-intro',
     title: 'Here is the bar chart.',
     text: 'Each column is a year of global tuna catch. Scroll to watch the series build.',
+    visible: false,
   },
   {
     id: 'hf1',
     title: '...and the fishing world bent to its will.',
     text: "As sushi's popularity grew, so did the demand for bluefin tuna. In the 1980s, it became possible and profitable to ship Atlantic bluefin tuna to Japan. By 2007, over 60,000 tonnes of Atlantic bluefin tuna were caught yearly.",
+    visible: true,
   },
   {
     id: 'hf1a',
     title: '',
     text: '1965 to 1990',
+    visible: true,
   },
   {
     id: 'hf1b',
     title: '',
     text: 'high demand in the 60s-80s really start to show effects here\nstricter regulations in place around 2000, but not followed strictly until 2007',
+    visible: true,
   },
   {
     id: 'hf2',
     title: '',
     text: 'Two years later, the global catch had fallen by 80%. Not for any change in demand — sushi remained popular - but a historic level of overfishing. The population was at risk of complete collapse. Strict management measures were put in place.',
+    visible: true,
   },
   {
     id: 'hf2-linger',
     title: '',
     text: '',
+    visible: true,
   },
   {
     id: 'hf3',
     title: '',
     text: "Slowly, the stock has recovered. Atlantic bluefin has moved from Endangered to Least Concern status, and quotas have increased. There is no immediate risk of a stock collapse, and so no immediate risk of a type of sushi wiped from existence.",
+    visible: true,
   },
   {
     id: 'hf4',
     title: '',
     text: 'This story is matched by Pacific and Southern Bluefin tuna species. High fishing pressure -> overfishing -> slow recovery after extensive stock management. 80,000 tonnes of bluefin are caught each year, mainly to serve the sushi industry.',
+    visible: true,
   },
   // {
   //   id: 'hf5',
   //   title: 'Yet there was never a danger of running out of fish for sushi:',
   //   text: 'While bluefin tuna is the choice tuna for sushi, Bigeye and Yellowfin are used as well.',
+  //   visible: true,
   // },
 ]
 </script>
@@ -65,7 +74,17 @@ const steps = [
   <StorySection id="stacked-bars" height="overscroll" width="full">
     <SectionGrid v-if="!minimalMode" class="stacked-bars-lead-grid" :columns="12" gap="1.25rem" align="start">
       <div class="story-copy story-copy--top">
-        <CopyBlock title="Lorem ipsum dolor sit amet">
+        <CopyBlock title="Bluefin Tuna is on the brink of extinction.">
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
+            dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+            ea commodo consequat.
+          </p>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
+            dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+            ea commodo consequat.
+          </p>
           <p>
             Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
             dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
@@ -80,10 +99,10 @@ const steps = [
           <TunaStackedBarsVisual :active-step="graphicProps.activeStep" />
         </template>
         <template #step="{ step }">
-          <CopyBlock v-if="!minimalMode" :title="step.title">
+          <CopyBlock v-if="!minimalMode && step.visible !== false" :title="step.title">
             <p style="white-space: pre-line">{{ step.text }}</p>
           </CopyBlock>
-          <span v-else class="stacked-bars-step-slot" aria-hidden="true" />
+          <span v-else-if="minimalMode" class="stacked-bars-step-slot" aria-hidden="true" />
         </template>
       </PinnedScrollSection>
     </div>

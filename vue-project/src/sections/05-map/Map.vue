@@ -15,21 +15,21 @@ defineProps({
 /** Scroll steps drive `activeStep` only; all copy lives on the map HUD in MapSectionVisual. */
 const steps = [
   // 0–4: year animates 1965 → 2023 (global view)
-  { id: 'm1', title: '', text: '' },
-  { id: 'm2', title: '', text: '' },
-  { id: 'm3', title: '', text: '' },
-  { id: 'm4', title: '', text: '' },
-  { id: 'm5', title: '', text: '' },
+  { id: 'm1', title: '', text: '', visible: true },
+  { id: 'm2', title: '', text: '', visible: true },
+  { id: 'm3', title: '', text: '', visible: true },
+  { id: 'm4', title: '', text: '', visible: true },
+  { id: 'm5', title: '', text: '', visible: true },
   // 5–8: global 2023 linger (basin cue on HUD)
-  { id: 'm8', title: '', text: '' },
+  { id: 'm8', title: '', text: '', visible: true },
   // 9: zoom into Mediterranean, year stays 2023 (no regional year scrub)
-  { id: 'm10', title: '', text: '' },
+  { id: 'm10', title: '', text: '', visible: true },
   // 10–11: farm dots fade in, then single linger beat; still Med camera
-  { id: 'm11', title: '', text: '' },
-  { id: 'm12', title: '', text: '' },
+  { id: 'm11', title: '', text: '', visible: true },
+  { id: 'm12', title: '', text: '', visible: true },
   // 12–14: return to global + end padding (year stays 2023)
-  { id: 'm13', title: '', text: '' },
-  { id: 'm14', title: '', text: '' },
+  { id: 'm13', title: '', text: '', visible: true },
+  { id: 'm14', title: '', text: '', visible: true },
 ]
 </script>
 

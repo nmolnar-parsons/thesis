@@ -65,8 +65,6 @@
   --color-section-surface: #ffffff;
   --color-link: #2563eb;
   --color-sticky-graphic-bg: #0f172a;
-  --color-step-card-bg: rgba(248, 250, 252, 0.9);
-  --color-step-card-border: rgba(148, 163, 184, 0.6);
   --color-copy-eyebrow: #475569;
   --color-copy-title: #1f2937;
   --color-copy-body: #1f2937;
@@ -129,13 +127,6 @@
   --story-section-padding-y: 2rem;
   --story-section-padding-x: 1rem;
 
-  /* Pinned scroll steps */
-  --scroll-step-padding: 1rem;
-  --step-card-padding-y: 1rem;
-  --step-card-padding-x: 1.2rem;
-  --step-card-radius: 0.75rem;
-  --step-card-max-width: min(560px, calc(100% - 2rem));
-
   /* D3 chart inner margins (must match drawChart margin.{left,right,bottom} in visuals) */
   --viz-chart-margin-right: calc(34px * var(--story-scale));
   --viz-chart-margin-bottom: calc(48px * var(--story-scale));
@@ -150,6 +141,15 @@
   --viz-legend-padding: 0.42rem 0.52rem;
   --viz-legend-list-gap: 0.1rem;
   --viz-legend-line-height: 1.15;
+
+  /* Pinned scroll steps — corner/border/bg match legend chrome */
+  --scroll-step-padding: 1rem;
+  --step-card-padding-y: 1rem;
+  --step-card-padding-x: 1.2rem;
+  --step-card-radius: 0;
+  --step-card-max-width: min(560px, calc(100% - 2rem));
+  --color-step-card-bg: var(--viz-legend-bg);
+  --color-step-card-border: var(--viz-legend-border);
 
   /*
    * TunaStackedBarsVisual + TunaProductionStreamgraphVisual: outer frame height (titles sit above).
@@ -342,8 +342,7 @@ html.story-hide-step-ui .scroll-step .step-card {
   padding: var(--step-card-padding-y) 1.15rem;
   border-radius: var(--step-card-radius);
   background: var(--color-step-card-bg);
-  border: 1px solid var(--color-step-card-border);
-  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.1);
+  border: var(--color-step-card-border);
 }
 
 #stacked-bars .step-column,

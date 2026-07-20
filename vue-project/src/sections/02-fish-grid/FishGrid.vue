@@ -15,47 +15,56 @@ const steps = [
   {
     id: 'fish-grid-single-fade',
     title: 'One fish',
-    text: 'A single Pacific bluefin comes into view.',
+    text: 'filler 1',
+    visible: false,
   },
   {
     id: 'fish-grid-single-hold',
-    title: 'One fish',
-    text: 'Hold on the fish before the scale begins to shift.',
+    title: 'This is a Bluefin Tuna.',
+    text: '',
+    visible: true,
   },
   {
     id: 'fish-grid-single-linger',
-    title: 'One fish',
-    text: 'Stay with the single fish for one more beat.',
+    title: '',
+    text: 'At 550lbs and 13 feet of lenght on average, these fish are amongst the largest commerically harvested ocean-dwelling creatures on the planet.',
+    visible: true,
   },
   {
     id: 'fish-grid-single-to-week',
-    title: 'One fish',
-    text: 'Zoom out to reveal a week of fish at the same resolution.',
+    title: '',
+    text: 'Bluefin tuna is the most prized fish for sushi, the once-niche Japanese delicacy that has conquered the restaurants of the world.',
+    visible: true,
   },
   {
     id: 'fish-grid-week-hold',
     title: '',
     text: "In 2023, Tokyo's Toyosu Fish Market sold, on average, 156 bluefin tuna per week.",
+    visible: true,
   },
   {
     id: 'fish-grid-week-linger',
     title: '',
-    text: 'Stay on the week grid while the copy settles.',
+    text: 'This is, roughly, 38 tonnes of fish.',
+    visible: true,
   },
   {
     id: 'fish-grid-week-to-year',
     title: '',
-    text: 'Zoom out again to reveal roughly a full year of fish in the dataset.',
+    text: 'step',
+    visible: false,
   },
   {
     id: 'fish-grid-year-hold',
-    title: 'A year of fish',
-    text: 'The full 2023 fish field stays readable at a glance.',
+    title: '',
+    text: 'In the entirety of 2023, the same market sold 8,090 bluefin tuna.',
+    visible: true,
   },
   {
     id: 'fish-grid-year-linger',
-    title: 'A year of fish',
-    text: 'Linger on the year before the story continues.',
+    title: 'Our demand for Bluefin has not slowed down. Are we running out?',
+    text: '',
+    visible: true,
   },
 ]
 </script>
@@ -72,10 +81,10 @@ const steps = [
         </div>
       </template>
       <template #step="{ step }">
-        <CopyBlock v-if="!minimalMode" :title="step.title">
+        <CopyBlock v-if="!minimalMode && step.visible !== false" :title="step.title">
           <p>{{ step.text }}</p>
         </CopyBlock>
-        <span v-else class="fish-grid-step-slot" aria-hidden="true" />
+        <span v-else-if="minimalMode" class="fish-grid-step-slot" aria-hidden="true" />
       </template>
     </PinnedScrollSection>
   </StorySection>
