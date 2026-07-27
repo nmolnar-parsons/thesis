@@ -146,12 +146,11 @@ const props = defineProps({
   minimalMode: { type: Boolean, default: false },
 })
 
-const MEDITERRANEAN_ZOOM_FILLER =
-  'Med Filler'
+const MEDITERRANEAN_ZOOM_FILLER = ''
 const MEDITERRANEAN_FARMS_FILLER =
   'The Mediterranean and the countries around it are leading the way in Bluefin farming. Each dot is a registered bluefin farm: together, they have the capacity to produce 80,000 tonnes of Bluefin in a year.'
-const LINGER_2023_FILLER = 'filler for 2023 linger'
-const DEFAULT_FILLER = 'default filler'
+const LINGER_2023_FILLER = ''
+const DEFAULT_FILLER = ''
 
 const mapRef = ref(null)
 const miniChartRef = ref(null)
@@ -601,8 +600,16 @@ function mapReferenceFrameScale() {
   const el = mapRef.value
   const width = el?.clientWidth || MAP_REFERENCE_WIDTH
   const height = el?.clientHeight || MAP_REFERENCE_HEIGHT
-  const scale = Math.min(width / MAP_REFERENCE_WIDTH, height / MAP_REFERENCE_HEIGHT)
+  const widthScale = width / MAP_REFERENCE_WIDTH
+  const heightScale = height / MAP_REFERENCE_HEIGHT
+  if (!Number.isFinite(widthScale) || widthScale <= 0) return 1
 
+  if (width < 900) {
+    // Portrait / narrow: fit globe width. Using min(w,h) + a high floor cropped the sides.
+    return Math.min(1, Math.max(0.18, widthScale))
+  }
+
+  const scale = Math.min(widthScale, heightScale)
   if (!Number.isFinite(scale) || scale <= 0) return 1
   return Math.min(1, Math.max(0.45, scale))
 }
@@ -881,12 +888,14 @@ onUnmounted(() => {
 .map-title {
   position: absolute;
   top: 0.6rem;
-  left: 50%;
+  /* Sit in the gap to the right of the metrics HUD so the headline doesn't collide */
+  left: calc(var(--map-hud-inset-left) + var(--map-hud-panel-width) + 0.65rem);
+  right: var(--map-hud-inset-right);
   z-index: 9;
   margin: 0;
   padding: 0;
-  transform: translateX(-50%);
-  width: calc(100% - 2rem);
+  width: auto;
+  transform: none;
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -1165,22 +1174,61 @@ onUnmounted(() => {
 
 @media (max-width: 900px) {
   .map-frame {
-    --map-hud-panel-width: min(240px, 76vw);
+    --map-hud-inset-left: var(--story-copy-edge-gutter, 1rem);
+    --map-hud-inset-right: var(--story-copy-edge-gutter, 1rem);
+    --map-hud-panel-width: 100%;
   }
 
   .mediterranean-callout {
-    left: 50%;
-    top: 30%;
-    width: min(41.6vmin, 272px);
+    display: none;
   }
 
   .map-title {
-    top: 0.4rem;
-    width: calc(100% - 1rem);
+    /* Stack: full-width title on top, HUD below — avoids collision on narrow screens */
+    top: 0.35rem;
+    left: var(--map-hud-inset-left);
+    right: var(--map-hud-inset-right);
+    width: auto;
+    white-space: normal;
+    line-height: 1.15;
+    z-index: 10;
   }
 
   .hud-row {
-    top: calc(0.4rem - 1px);
+    top: 2.85rem;
+  }
+
+  .metrics-card {
+    width: 100%;
+    max-width: none;
+  }
+
+  .map-legend {
+    left: var(--map-hud-inset-left);
+    right: var(--map-hud-inset-right);
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .map-title {
+    font-size: clamp(1.15rem, 5.2vw, 1.55rem);
+  }
+
+  .hud-row {
+    top: 3.35rem;
+  }
+
+  .map-hud-title {
+    font-size: clamp(1.05rem, 4.2vw, 1.35rem);
+  }
+
+  .narrative-copy {
+    font-size: 0.8rem;
+  }
+
+  .metric-line {
+    font-size: 0.8rem;
   }
 }
 

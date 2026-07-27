@@ -48,9 +48,21 @@ defineProps({
   grid-column: 1 / span 12;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 900px) {
   .production-visual {
     grid-column: 1 / -1;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .production-visual > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 }
 </style>

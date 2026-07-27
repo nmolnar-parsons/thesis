@@ -34,10 +34,14 @@ const CALLOUT_REVEAL_DURATION_MS = 440
 const CALLOUT_AXIS_PAD = 23
 
 const NYC_DISTRICT_KEY = 'New York, NY'
+const NARROW_LAYOUT_MAX_WIDTH = 720
+const NARROW_CALLOUT_MIN_PERCENT = 4
+const NARROW_CALLOUT_LABEL_MAX_CHARS = 12
 
 const hoveredCountry = ref('')
 const selectedKey = ref(NYC_DISTRICT_KEY)
 const visualScale = ref(1)
+const narrowLayout = ref(false)
 
 const tooltip = ref({
   visible: false,
@@ -79,12 +83,17 @@ const pieGenerator = pie()
 
 const donutGeometry = computed(() => {
   const scale = visualScale.value
+  const narrow = narrowLayout.value
+  /** Pull callouts inward on phones so labels stay inside the clipped frame. */
+  const calloutTighten = narrow ? 0.72 : 1
   const singleOuterRadius = SINGLE_OUTER_RADIUS * scale
   const singleInnerRadius = SINGLE_INNER_RADIUS * scale
-  const calloutRadialBump = CALLOUT_RADIAL_BUMP * scale
-  const calloutAxisPad = CALLOUT_AXIS_PAD * scale
+  const calloutRadialBump = CALLOUT_RADIAL_BUMP * scale * calloutTighten
+  const calloutAxisPad = CALLOUT_AXIS_PAD * scale * calloutTighten
   const topCalloutAnchorY = -(singleOuterRadius + calloutRadialBump + calloutAxisPad)
   const bottomCalloutAnchorY = singleOuterRadius + calloutRadialBump + calloutAxisPad
+  const labelRadius =
+    (narrow ? singleOuterRadius + 28 * scale : CALLOUT_LABEL_RADIUS * scale)
 
   return {
     gridSvgSize: GRID_SVG_SIZE * scale,
@@ -92,10 +101,10 @@ const donutGeometry = computed(() => {
     singleSvgSize: SINGLE_SVG_SIZE * scale,
     singleCenter: (SINGLE_SVG_SIZE * scale) / 2,
     singleOuterRadius,
-    calloutLabelRadius: CALLOUT_LABEL_RADIUS * scale,
-    calloutDotR: CALLOUT_DOT_R * scale,
-    calloutTextGap: CALLOUT_TEXT_GAP * scale,
-    calloutVerticalGap: CALLOUT_VERTICAL_GAP * scale,
+    calloutLabelRadius: labelRadius,
+    calloutDotR: CALLOUT_DOT_R * scale * (narrow ? 0.85 : 1),
+    calloutTextGap: CALLOUT_TEXT_GAP * scale * calloutTighten,
+    calloutVerticalGap: CALLOUT_VERTICAL_GAP * scale * (narrow ? 0.78 : 1),
     topCalloutAnchorY,
     bottomCalloutAnchorY,
     calloutVerticalBand: bottomCalloutAnchorY - topCalloutAnchorY,
@@ -203,6 +212,7 @@ let calloutRafId = 0
 
 function syncVisualScale() {
   visualScale.value = readStoryScale(document.documentElement)
+  narrowLayout.value = window.innerWidth <= NARROW_LAYOUT_MAX_WIDTH
 }
 
 function cancelCalloutReveal() {
@@ -424,7 +434,11 @@ function measurePolylineLength(pointsStr) {
 
 function buildPackedCallouts(chart) {
   if (!chart?.arcs?.length) return []
-  const packed = chart.arcs.map((arcDatum) => ({
+  const arcs = narrowLayout.value
+    ? chart.arcs.filter((arcDatum) => (arcDatum.data.percent ?? 0) >= NARROW_CALLOUT_MIN_PERCENT)
+    : chart.arcs
+  if (!arcs.length) return []
+  const packed = arcs.map((arcDatum) => ({
     ...calloutForArc(
       arcDatum,
       donutGeometry.value.arcGeneratorSingle,
@@ -438,6 +452,7 @@ function buildPackedCallouts(chart) {
   out = pinCalloutsInVerticalBand(out)
   for (const r of out) {
     r.lineLength = measurePolylineLength(r.polylinePoints)
+    r.label = formatCalloutLabel(r.country)
   }
   return out
 }
@@ -481,6 +496,12 @@ function onArcLeave() {
 
 function formatTonnes(value) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+function formatCalloutLabel(country) {
+  if (!narrowLayout.value || !country) return country
+  if (country.length <= NARROW_CALLOUT_LABEL_MAX_CHARS) return country
+  return `${country.slice(0, NARROW_CALLOUT_LABEL_MAX_CHARS - 1)}…`
 }
 
 function formatDistrictCity(district) {
@@ -639,7 +660,7 @@ function districtHasCountrySlice(district, country) {
                     dominant-baseline="middle"
                     :opacity="calloutReveal"
                   >
-                    {{ item.country }}
+                    {{ item.label ?? item.country }}
                   </text>
                 </g>
                 <g class="center-tooltip">
@@ -713,6 +734,54 @@ function districtHasCountrySlice(district, country) {
   text-decoration: underline;
   text-decoration-thickness: 0.06em;
   text-underline-offset: 0.08em;
+}
+
+@media (max-width: 900px) {
+  .imports-wrap {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .imports-title {
+    position: static;
+    top: auto;
+    left: auto;
+    right: auto;
+    z-index: auto;
+    flex: 0 0 auto;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 0.35rem;
+    padding: 0.4rem 0.75rem 0.85rem;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.2;
+    pointer-events: none;
+  }
+
+  .imports-title-anchor {
+    display: block;
+    white-space: normal;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  .imports-title-text {
+    position: static !important;
+  }
+
+  .imports-title-reference {
+    display: none !important;
+  }
+
+  .imports-body {
+    flex: 0 1 auto;
+    padding-top: 0;
+    min-height: 0;
+  }
 }
 
 .imports-body {
@@ -813,6 +882,7 @@ function districtHasCountrySlice(district, country) {
   background: none;
   opacity: 0.32;
   pointer-events: none;
+  white-space: nowrap;
   transition: opacity 0.16s ease;
 }
 
@@ -1055,25 +1125,76 @@ function districtHasCountrySlice(district, country) {
 
   .imports-body--with-menu {
     grid-template-columns: 1fr;
-    gap: 0.6rem;
+    gap: 0.75rem;
   }
 
   .district-menu {
     width: 100%;
+    height: auto;
+    padding: 0.25rem 0.35rem 0.5rem;
   }
 
   .district-menu-grid {
     flex: none;
     min-height: auto;
     height: auto;
-    grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr)) !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
     grid-template-rows: none !important;
-    grid-auto-rows: minmax(4rem, auto);
-    gap: 0.5rem 0.35rem;
+    grid-auto-rows: auto;
+    gap: 0.45rem 0.35rem;
+    justify-content: stretch;
+  }
+
+  .district-menu-card {
+    gap: 0.12rem;
+    padding: 0.15rem 0.1rem;
+    width: 100%;
+    max-width: 100%;
+    justify-self: stretch;
+  }
+
+  .district-menu-card__label {
+    font-size: clamp(0.48rem, 2vw, 0.58rem);
+    line-height: 1.1;
+    font-weight: 600;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .imports-center {
     border-radius: 0;
+  }
+
+  .callout-label {
+    font-size: 0.72rem;
+  }
+
+  .center-tooltip__country {
+    font-size: 0.9rem;
+  }
+
+  .center-tooltip__detail {
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .imports-title {
+    padding: 0.35rem 0.5rem 0.85rem;
+    font-size: clamp(1.05rem, 5vw, 1.35rem);
+  }
+
+  .district-menu-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.35rem 0.2rem;
+  }
+
+  .district-menu-card__label {
+    font-size: 0.46rem;
+    line-height: 1.1;
+    white-space: nowrap;
   }
 }
 </style>

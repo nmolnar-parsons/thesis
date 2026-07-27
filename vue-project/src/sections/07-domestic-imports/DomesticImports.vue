@@ -51,9 +51,22 @@ defineProps({
   padding-bottom: clamp(2rem, 6vh, 5rem);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 900px) {
+  .domestic-imports-grid {
+    min-height: auto;
+  }
+
   .domestic-visual {
     grid-column: 1 / -1;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    padding-bottom: 0;
+  }
+
+  .domestic-visual > * {
+    width: 100%;
   }
 }
 </style>

@@ -12,7 +12,7 @@ import aquaCsvRaw from '../../data/csv/bluefin_aquaculture.csv?raw'
 import csvRaw from '../../data/csv/GTA_FIRMs_tuna_cleaned_countries.csv?raw'
 import { readColorDefaultBlue, readColorTunaFarmed } from '../../utils/readStoryColors.js'
 import { readStoryScale } from '../../utils/readStoryScale.js'
-import { BLUEFIN_YEAR_AXIS_TICKS, formatYearTick } from '../shared/chartAxisConfig.js'
+import { yearAxisTicksForWidth, formatYearTick } from '../shared/chartAxisConfig.js'
 import {
   CONTINENT_ORDER,
   continentLegendSwatch,
@@ -271,14 +271,15 @@ function drawChart() {
   if (width < 20 || height < 20) return
   const storyScale = readStoryScale(wrapRef.value ?? host)
   const scalePx = (value) => value * storyScale
+  const isNarrow = width < 900
   const baseMargin = {
-    top: scalePx(48),
-    right: scalePx(34),
-    bottom: scalePx(48),
-    left: scalePx(84),
+    top: scalePx(isNarrow ? 28 : 48),
+    right: scalePx(isNarrow ? 18 : 34),
+    bottom: scalePx(isNarrow ? 36 : 48),
+    left: scalePx(isNarrow ? 44 : 84),
   }
   const innerH = height - baseMargin.top - baseMargin.bottom
-  const xAxisBand = scalePx(X_AXIS_BAND)
+  const xAxisBand = scalePx(isNarrow ? 28 : X_AXIS_BAND)
   if (innerH < xAxisBand + scalePx(40)) return
 
   /** Stream area only; x-axis sits at y = chartHeight (matches innerH − band, same pattern as TunaStackedBarsVisual inner plot). */
@@ -290,9 +291,9 @@ function drawChart() {
   const yScaleTop = scaleLinear().domain([0, Y_AXIS_MAX]).range([chartHeight, 0])
   const yAxisTop = () =>
     axisLeft(yScaleTop)
-      .ticks(4)
-      .tickSizeInner(scalePx(Y_AXIS_TICK_SIZE))
-      .tickPadding(scalePx(Y_AXIS_TICK_PADDING))
+      .ticks(isNarrow ? 3 : 4)
+      .tickSizeInner(scalePx(isNarrow ? 4 : Y_AXIS_TICK_SIZE))
+      .tickPadding(scalePx(isNarrow ? 4 : Y_AXIS_TICK_PADDING))
       .tickFormat(formatTickShort)
 
   const measureLayer = svg
@@ -320,14 +321,19 @@ function drawChart() {
       ?.getBBox().height || 16
   measureLayer.remove()
 
-  const axisGapTarget = baseMargin.right
-  const tickTextOffset = scalePx(Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING)
-  const labelToTickGap = axisGapTarget / 2
+  const axisGapTarget = isNarrow ? scalePx(10) : baseMargin.right
+  const tickTextOffset = scalePx(
+    isNarrow ? 4 + 4 : Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING,
+  )
+  const labelToTickGap = isNarrow ? scalePx(4) : axisGapTarget / 2
   const labelCenterFromLeftEdge = axisGapTarget + axisLabelThickness / 2
   const tickLabelsLeftEdge = axisGapTarget + axisLabelThickness + labelToTickGap
   const margin = {
     ...baseMargin,
     left: Math.ceil(tickLabelsLeftEdge + tickTextOffset + maxTickLabelWidth),
+  }
+  if (isNarrow) {
+    margin.right = Math.max(baseMargin.right, Math.round(margin.left * 0.55))
   }
   const innerWidth = width - margin.left - margin.right
   if (innerWidth < 20) return
@@ -467,7 +473,7 @@ function drawChart() {
     })
 
   gAxisX.attr('transform', `translate(0,${chartHeight})`).call(
-    axisBottom(xScale).tickValues(BLUEFIN_YEAR_AXIS_TICKS).tickFormat(formatYearTick),
+    axisBottom(xScale).tickValues(yearAxisTicksForWidth(width)).tickFormat(formatYearTick),
   )
 
   gTop.append('g').attr('class', 'story-chart-axis axis axis-y').call(yAxisTop())
@@ -547,7 +553,6 @@ onUnmounted(() => {
       class="view-toggle"
       role="group"
       aria-label="Chart view"
-      :style="{ paddingLeft: 'var(--streamgraph-chart-margin-left, 84px)' }"
     >
       <button
         type="button"
@@ -568,48 +573,48 @@ onUnmounted(() => {
     </div>
     <div class="chart-plot-layer">
       <div ref="hostRef" class="d3-host" />
-      <aside
-        v-show="viewMode === 'aqua'"
-        class="legend"
-        role="note"
-        aria-label="Production type color key"
-      >
-        <ul class="legend-list">
-          <li class="legend-item">
-            <span class="swatch swatch-wild" />
-            <span class="legend-label">Wild capture</span>
-          </li>
-          <li class="legend-item">
-            <span class="swatch swatch-farmed" />
-            <span class="legend-label">Farmed</span>
-          </li>
-        </ul>
-      </aside>
-      <aside
-        v-show="viewMode === 'countries'"
-        class="legend legend--continents"
-        role="list"
-        aria-label="Catch by continent"
-      >
-        <div
-          v-for="group in countryLegendGroups"
-          :key="group.continent"
-          class="legend-continent-block"
-          :class="{ 'legend-continent-block--active': activeLegendContinent === group.continent }"
-          role="listitem"
-          @mouseenter="setLegendContinentHighlight(group.continent)"
-          @mouseleave="clearLegendContinentHighlight()"
-        >
-          <div class="legend-continent-header">
-            <span
-              class="swatch swatch-continent"
-              :style="{ background: continentLegendSwatch(group.continent) }"
-            />
-            <span class="legend-label">{{ group.continent }}</span>
-          </div>
-        </div>
-      </aside>
     </div>
+    <aside
+      v-show="viewMode === 'aqua'"
+      class="legend"
+      role="note"
+      aria-label="Production type color key"
+    >
+      <ul class="legend-list">
+        <li class="legend-item">
+          <span class="swatch swatch-wild" />
+          <span class="legend-label">Wild capture</span>
+        </li>
+        <li class="legend-item">
+          <span class="swatch swatch-farmed" />
+          <span class="legend-label">Farmed</span>
+        </li>
+      </ul>
+    </aside>
+    <aside
+      v-show="viewMode === 'countries'"
+      class="legend legend--continents"
+      role="list"
+      aria-label="Catch by continent"
+    >
+      <div
+        v-for="group in countryLegendGroups"
+        :key="group.continent"
+        class="legend-continent-block"
+        :class="{ 'legend-continent-block--active': activeLegendContinent === group.continent }"
+        role="listitem"
+        @mouseenter="setLegendContinentHighlight(group.continent)"
+        @mouseleave="clearLegendContinentHighlight()"
+      >
+        <div class="legend-continent-header">
+          <span
+            class="swatch swatch-continent"
+            :style="{ background: continentLegendSwatch(group.continent) }"
+          />
+          <span class="legend-label">{{ group.continent }}</span>
+        </div>
+      </div>
+    </aside>
     <div ref="tooltipRef" class="tooltip" />
   </div>
 </template>
@@ -620,9 +625,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: var(--viz-chart-wrap-height);
-  max-height: var(--viz-chart-wrap-max-height);
-  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  max-height: none;
+  overflow: visible;
   font-family: var(--font-ui);
   font-weight: var(--font-weight-ui);
 }
@@ -638,6 +645,10 @@ onUnmounted(() => {
   gap: 0.35rem;
   margin-bottom: 0.5rem;
   flex-shrink: 0;
+  box-sizing: border-box;
+  width: 100%;
+  padding-left: var(--streamgraph-chart-margin-left, 84px);
+  padding-right: var(--viz-chart-margin-right);
 }
 
 .view-toggle-btn {
@@ -666,44 +677,46 @@ onUnmounted(() => {
 
 .chart-plot-layer {
   position: relative;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 0;
+  min-width: 0;
   width: 100%;
-  height: 100%;
+  max-width: 100%;
+  height: var(--viz-chart-wrap-height);
+  max-height: var(--viz-chart-wrap-max-height);
+  overflow-x: hidden;
 }
 
 .legend {
-  position: absolute;
-  right: var(--viz-chart-margin-right);
-  bottom: calc(
-    var(--viz-chart-margin-bottom) + var(--viz-x-axis-band) + var(--viz-legend-above-axis-gap)
-  );
+  position: static;
+  flex: 0 0 auto;
   z-index: 7;
-  width: auto;
-  max-width: min(calc(280px * var(--story-scale)), 46vw);
-  overflow: auto;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100% - var(--streamgraph-chart-margin-left, 84px) - var(--viz-chart-margin-right));
+  min-width: 0;
+  margin: 0.45rem var(--viz-chart-margin-right) 0 var(--streamgraph-chart-margin-left, 84px);
   padding: var(--viz-legend-padding);
   border: var(--viz-legend-border);
   border-radius: 0;
   background: var(--viz-legend-bg);
   box-shadow: none;
+  overflow: visible;
 }
 
 .legend.legend--continents {
-  left: auto;
-  right: var(--viz-chart-margin-right);
-  width: max-content;
-  max-width: calc(100% - var(--streamgraph-chart-margin-left, 84px) - var(--viz-chart-margin-right));
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
-  gap: 0.65rem 1rem;
+  align-content: flex-start;
+  gap: 0.35rem 0.65rem;
+  width: 100%;
+  max-width: calc(100% - var(--streamgraph-chart-margin-left, 84px) - var(--viz-chart-margin-right));
+  box-sizing: border-box;
   padding: 0.45rem 0.65rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
 .legend-list {
@@ -753,7 +766,7 @@ onUnmounted(() => {
   border-radius: 2px;
   padding: 0.12rem 0.35rem;
   margin: 0;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -784,6 +797,8 @@ onUnmounted(() => {
 
 .d3-host {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 100%;
 }
 
@@ -851,31 +866,30 @@ onUnmounted(() => {
 }
 
 @media (max-width: 900px) {
-  .legend {
-    max-width: min(220px, 56vw);
+  .streamgraph-title {
+    position: absolute;
+    top: 0.35rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    margin: 0;
+    white-space: normal;
+    line-height: 1.15;
+    pointer-events: none;
   }
 
+  .view-toggle {
+    padding-top: var(--viz-chart-title-clearance);
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .legend,
   .legend.legend--continents {
-    max-width: calc(100% - var(--streamgraph-chart-margin-left, 84px) - var(--viz-chart-margin-right));
-    left: auto;
-    right: var(--viz-chart-margin-right);
-  }
-}
-
-@media (max-width: 640px) {
-  /* Static flow under chart; box style still matches shared tokens */
-  .legend {
-    position: static;
-    margin-top: 0.55rem;
-    margin-left: auto;
-    max-width: 100%;
-  }
-
-  .legend.legend--continents {
-    margin-left: auto;
-    margin-right: 0;
-    max-width: 100%;
-    width: max-content;
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+    max-width: calc(100% - 1rem);
   }
 }
 </style>

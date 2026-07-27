@@ -8,7 +8,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import csvRaw from '../../data/csv/GTA_FIRMs_tuna_cleaned_grouped.csv?raw'
 import { readColorDefaultBlue } from '../../utils/readStoryColors.js'
 import { readStoryScale } from '../../utils/readStoryScale.js'
-import { BLUEFIN_YEAR_AXIS_TICKS, formatYearTick } from '../shared/chartAxisConfig.js'
+import { yearAxisTicksForWidth, formatYearTick } from '../shared/chartAxisConfig.js'
 
 const compactNumber = d3Format('~s')
 function formatTickShort(d) {
@@ -395,11 +395,12 @@ function drawChart() {
   if (width < 20 || height < 20) return
   const storyScale = readStoryScale(wrapRef.value ?? el)
   const scalePx = (value) => value * storyScale
+  const isNarrow = width < 900
   const baseMargin = {
-    top: scalePx(48),
-    right: scalePx(34),
-    bottom: scalePx(48),
-    left: scalePx(84),
+    top: scalePx(isNarrow ? 28 : 48),
+    right: scalePx(isNarrow ? 18 : 34),
+    bottom: scalePx(isNarrow ? 36 : 48),
+    left: scalePx(isNarrow ? 44 : 84),
   }
   const innerH = height - baseMargin.top - baseMargin.bottom
   if (innerH < 20) return
@@ -416,9 +417,9 @@ function drawChart() {
 
   const yScale = scaleLinear().domain([0, Y_AXIS_MAX]).range([innerH, 0])
   const yAxisFn = axisLeft(yScale)
-    .ticks(6)
-    .tickSizeInner(scalePx(Y_AXIS_TICK_SIZE))
-    .tickPadding(scalePx(Y_AXIS_TICK_PADDING))
+    .ticks(isNarrow ? 4 : 6)
+    .tickSizeInner(scalePx(isNarrow ? 4 : Y_AXIS_TICK_SIZE))
+    .tickPadding(scalePx(isNarrow ? 4 : Y_AXIS_TICK_PADDING))
     .tickFormat(formatTickShort)
     .tickSizeOuter(0)
 
@@ -447,14 +448,20 @@ function drawChart() {
       ?.getBBox().height || 16
   measureLayer.remove()
 
-  const axisGapTarget = baseMargin.right
-  const tickTextOffset = scalePx(Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING)
-  const labelToTickGap = axisGapTarget / 2
+  const axisGapTarget = isNarrow ? scalePx(10) : baseMargin.right
+  const tickTextOffset = scalePx(
+    isNarrow ? 4 + 4 : Y_AXIS_TICK_SIZE + Y_AXIS_TICK_PADDING,
+  )
+  const labelToTickGap = isNarrow ? scalePx(4) : axisGapTarget / 2
   const labelCenterFromLeftEdge = axisGapTarget + axisLabelThickness / 2
   const tickLabelsLeftEdge = axisGapTarget + axisLabelThickness + labelToTickGap
   const margin = {
     ...baseMargin,
     left: Math.ceil(tickLabelsLeftEdge + tickTextOffset + maxTickLabelWidth),
+  }
+  if (isNarrow) {
+    // Balance side gutters so the plot reads centered in the frame.
+    margin.right = Math.max(baseMargin.right, Math.round(margin.left * 0.55))
   }
   publishScrollyYAxisInsetFromTuna(margin.left)
   const innerW = width - margin.left - margin.right
@@ -550,7 +557,9 @@ function drawChart() {
   gMain.attr('transform', `translate(${margin.left},${margin.top})`)
 
   const gx = gMain.select('g.x-axis')
-  const yearTicks = BLUEFIN_YEAR_AXIS_TICKS.map(String).filter((year) => years.includes(Number(year)))
+  const yearTicks = yearAxisTicksForWidth(width)
+    .map(String)
+    .filter((year) => years.includes(Number(year)))
   gx.attr('transform', `translate(0,${innerH})`).call(
     axisBottom(xScale).tickValues(yearTicks).tickFormat(formatYearTick),
   )
@@ -925,6 +934,24 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   width: 100%;
+}
+
+@media (max-width: 900px) {
+  .chart-main-title {
+    position: absolute;
+    top: 0.35rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    margin: 0;
+    white-space: normal;
+    line-height: 1.15;
+    pointer-events: none;
+  }
+
+  .stacked-chart-body {
+    padding-top: var(--viz-chart-title-clearance);
+  }
 }
 
 .annotation-text-inputs {

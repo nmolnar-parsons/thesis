@@ -36,7 +36,7 @@ defineProps({
   grid-column: 1 / span 12;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 900px) {
   .toyosu-visual {
     grid-column: 1 / -1;
   }

@@ -111,8 +111,8 @@ const steps = [
 
 @media (max-width: 900px) {
   #map :deep(.step-column) {
-    padding-top: 70vh;
-    padding-bottom: 70vh;
+    padding-top: 100vh;
+    padding-bottom: 100vh;
   }
 }
 </style>

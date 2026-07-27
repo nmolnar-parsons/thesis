@@ -178,8 +178,22 @@
 @media (max-width: 900px) {
   :root {
     --story-scale: 1;
-    --viz-chart-wrap-height: clamp(360px, 72vh, 640px);
-    --viz-chart-wrap-max-height: 640px;
+    --viz-chart-wrap-height: clamp(320px, 68vh, 560px);
+    --viz-chart-wrap-max-height: 560px;
+
+    /* Match MapSectionVisual mobile title sizing */
+    --font-size-visual-title: clamp(1.15rem, 5.2vw, 1.55rem);
+    --space-visual-title-gap: 0.15rem;
+    --viz-chart-title-clearance: 3.25rem;
+    --font-size-copy-title: 1.15rem;
+    --font-size-axis-title: 0.85rem;
+    --font-size-ui: 0.9rem;
+    --font-size-axis-tick: 0.7rem;
+    --story-annotation-stacked-bars-label-font-size: 0.9rem;
+
+    /* Symmetric edge gutters for narrative + scrolly overlay copy */
+    --story-copy-edge-gutter: 1rem;
+    --story-scrolly-copy-max-width: min(28rem, calc(100% - 2 * var(--story-copy-edge-gutter)));
   }
 }
 
@@ -193,6 +207,13 @@
       )
     );
     --story-scrolly-copy-max-width: min(28rem, calc(100% - 1.5rem));
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    /* Override 980px asymmetric inset — mobile overlay copy is centered with equal gutters */
+    --story-scrolly-copy-max-width: min(28rem, calc(100% - 2 * var(--story-copy-edge-gutter)));
   }
 }
 
@@ -367,6 +388,22 @@ html.story-hide-step-ui .scroll-step .step-card {
   }
 }
 
+@media (max-width: 900px) {
+  #stacked-bars .scroll-step,
+  #fish-grid .scroll-step {
+    justify-content: center;
+    align-items: flex-start;
+    padding: var(--scroll-step-padding) var(--story-copy-edge-gutter);
+  }
+
+  #stacked-bars .scroll-step .copy-block,
+  #stacked-bars .scroll-step .step-card,
+  #fish-grid .scroll-step .copy-block,
+  #fish-grid .scroll-step .step-card {
+    margin-inline: auto;
+  }
+}
+
 /* Default layout for basic copy inside a 12-column SectionGrid. Override in section scoped styles when needed. */
 .story-copy {
   grid-column: 4 / span 6;
@@ -384,8 +421,18 @@ html.story-hide-step-ui .scroll-step .step-card {
   margin-bottom: 0.5rem;
 }
 
-@media (max-width: 980px) {
+/*
+ * Match SectionGrid's single-column collapse at 900px. Spanning cols 2–11 on a
+ * 1-track grid creates implicit columns and squeezes visuals to ~half width.
+ */
+@media (max-width: 900px) {
   .story-copy {
-    grid-column: 2 / span 10;
+    grid-column: 1 / -1;
+    justify-self: center;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: min(36rem, calc(100% - 2 * var(--story-copy-edge-gutter)));
+    margin-inline: auto;
+    padding-inline: 0;
   }
 }

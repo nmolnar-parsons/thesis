@@ -74,7 +74,8 @@ onMounted(() => {
 }
 
 .scroll-step {
-  min-height: 100vh;
+  /* Full viewport+ so the next copy enters only after the previous has left the top */
+  min-height: 110vh;
   padding: var(--scroll-step-padding);
   display: flex;
   align-items: center;
@@ -112,11 +113,27 @@ onMounted(() => {
 
 @media (max-width: 900px) {
   .sticky-graphic {
-    height: 72vh;
+    top: 0;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sticky-graphic > * {
+    width: 100%;
+    max-height: 100%;
+  }
+
+  .step-column {
+    margin-top: -100vh;
+    margin-top: -100dvh;
   }
 
   .scroll-step {
-    min-height: 70vh;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 }
 </style>

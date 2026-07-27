@@ -36,11 +36,14 @@ const scrollerEl = ref(null)
 /** Overall 0→1 while intro scroller travels through viewport; tail before unpin is dwell. */
 const scrollRaw = ref(0)
 const prefersReducedMotion = ref(false)
+/** False until intro images are ready so the section stays solid blue, then fades in. */
+const assetsReady = ref(false)
 
 /** Title opacity ramps with scroll; hits 1 at TITLE_FADE_END_RAW (before scrollRaw === 1). */
 const TITLE_FADE_START_RAW = 0.48
 const TITLE_FADE_END_RAW = 0.82
 const VISUAL_DIM_TARGET_OPACITY = 0.2
+const ASSET_WAIT_MS = 8000
 
 function clamp01(x) {
   return Math.min(1, Math.max(0, x))
@@ -86,6 +89,38 @@ function readReducedMotion() {
   syncScrollRawFromViewport()
 }
 
+function waitForImageSrc(src) {
+  const img = new Image()
+  img.src = src
+  const loaded =
+    img.complete && img.naturalWidth > 0
+      ? Promise.resolve()
+      : new Promise((resolve) => {
+          img.addEventListener('load', resolve, { once: true })
+          img.addEventListener('error', resolve, { once: true })
+        })
+  return loaded.then(async () => {
+    if (typeof img.decode !== 'function') return
+    try {
+      await img.decode()
+    } catch {
+      // Image may still paint even if decode() rejects.
+    }
+  })
+}
+
+async function waitForIntroAssets() {
+  const wait = Promise.all(columns.map((col) => waitForImageSrc(col.src)))
+  const timeout = new Promise((resolve) => setTimeout(resolve, ASSET_WAIT_MS))
+  await Promise.race([wait, timeout])
+}
+
+function afterNextPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve))
+  })
+}
+
 watch(() => props.minimalMode, syncScrollRawFromViewport)
 
 let raf = 0
@@ -94,13 +129,22 @@ function onScroll() {
   raf = requestAnimationFrame(syncScrollRawFromViewport)
 }
 
-onMounted(() => {
+onMounted(async () => {
   motionMq = window.matchMedia('(prefers-reduced-motion: reduce)')
   readReducedMotion()
   motionMq.addEventListener('change', readReducedMotion)
   syncScrollRawFromViewport()
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onScroll, { passive: true })
+
+  if (prefersReducedMotion.value) {
+    assetsReady.value = true
+    return
+  }
+  await waitForIntroAssets()
+  // Paint the solid blue (opacity 0) frame before starting the fade.
+  await afterNextPaint()
+  assetsReady.value = true
 })
 
 onUnmounted(() => {
@@ -120,26 +164,31 @@ onUnmounted(() => {
         :class="{ 'intro-scroller--dwell': useScrollFade }"
       >
         <div class="intro-shell">
-          <div class="intro-grid" :style="{ opacity: visualOpacity }">
-            <div v-for="(col, index) in columns" :key="index" class="intro-col">
-              <div class="intro-col-stack">
-                <img class="intro-col-img" :src="col.src" :alt="col.alt" />
+          <div
+            class="intro-entrance"
+            :class="{ 'intro-entrance--ready': assetsReady }"
+          >
+            <div class="intro-grid" :style="{ opacity: visualOpacity }">
+              <div v-for="(col, index) in columns" :key="index" class="intro-col">
+                <div class="intro-col-stack">
+                  <img class="intro-col-img" :src="col.src" :alt="col.alt" />
+                </div>
               </div>
             </div>
+            <h1
+              class="intro-title"
+              :style="{
+                opacity: titleOpacity,
+                visibility: titleOpacity > 0.02 ? 'visible' : 'hidden',
+              }"
+              :aria-hidden="titleAriaHidden"
+            >
+              <span class="intro-title-inner">
+                <span class="intro-title-line">The Last Sushi</span>
+                <span class="intro-title-line">in the World</span>
+              </span>
+            </h1>
           </div>
-          <h1
-            class="intro-title"
-            :style="{
-              opacity: titleOpacity,
-              visibility: titleOpacity > 0.02 ? 'visible' : 'hidden',
-            }"
-            :aria-hidden="titleAriaHidden"
-          >
-            <span class="intro-title-inner">
-              <span class="intro-title-line">The Last Sushi</span>
-              <span class="intro-title-line">in the World</span>
-            </span>
-          </h1>
         </div>
       </div>
     </StorySection>
@@ -167,6 +216,24 @@ onUnmounted(() => {
   width: 100%;
   min-height: 100vh;
   height: min(100vh, 100dvh);
+}
+
+/* Hold on section blue until assets are ready, then fade content in together. */
+.intro-entrance {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.15s ease;
+}
+
+.intro-entrance--ready {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-entrance {
+    transition: none;
+  }
 }
 
 .intro-grid {
@@ -245,21 +312,37 @@ onUnmounted(() => {
 @media (max-width: 720px) {
   .intro-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    min-height: 100vh;
+    height: min(100vh, 100dvh);
   }
 
   .intro-col {
-    min-height: 40vh;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
     height: auto;
+  }
+
+  .intro-title {
+    font-size: clamp(2.25rem, 9vw, 4.5rem);
   }
 }
 
 @media (min-width: 721px) and (max-width: 900px) {
   .intro-grid {
     grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    min-height: 100vh;
+    height: min(100vh, 100dvh);
   }
 
   .intro-col {
-    min-height: 50vh;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
     height: auto;
   }
 }

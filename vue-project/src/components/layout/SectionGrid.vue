@@ -30,6 +30,12 @@ defineProps({
 @media (max-width: 900px) {
   .section-grid {
     grid-template-columns: 1fr;
+    /* Prevent misplaced span-* children from spawning implicit side columns. */
+    grid-auto-columns: minmax(0, 0px);
+  }
+
+  .section-grid > * {
+    grid-column: 1 / -1;
   }
 }
 </style>

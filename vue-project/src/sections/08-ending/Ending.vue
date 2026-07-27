@@ -254,21 +254,35 @@ onUnmounted(() => {
 @media (max-width: 720px) {
   .ending-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    min-height: 100vh;
+    height: min(100vh, 100dvh);
   }
 
   .ending-col {
-    min-height: 40vh;
+    min-width: 0;
+    min-height: 0;
     height: auto;
+  }
+
+  .ending-title {
+    font-size: clamp(2.25rem, 9vw, 4.5rem);
   }
 }
 
 @media (min-width: 721px) and (max-width: 900px) {
   .ending-grid {
     grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    min-height: 100vh;
+    height: min(100vh, 100dvh);
   }
 
   .ending-col {
-    min-height: 50vh;
+    min-width: 0;
+    min-height: 0;
     height: auto;
   }
 }
