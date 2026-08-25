@@ -888,8 +888,7 @@ onUnmounted(() => {
 .map-title {
   position: absolute;
   top: 0.6rem;
-  /* Sit in the gap to the right of the metrics HUD so the headline doesn't collide */
-  left: calc(var(--map-hud-inset-left) + var(--map-hud-panel-width) + 0.65rem);
+  left: var(--map-hud-inset-left);
   right: var(--map-hud-inset-right);
   z-index: 9;
   margin: 0;
