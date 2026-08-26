@@ -16,7 +16,12 @@ defineProps({
   <StorySection id="domestic-imports" height="min-screen" width="full">
     <SectionGrid class="domestic-imports-grid" :columns="12" gap="1.25rem" align="start">
       <div v-if="!minimalMode" class="story-copy story-copy--top">
-        <CopyBlock title="Lorem ipsum dolor sit amet">
+        <CopyBlock title="What does this mean for you dear reader?">
+          <p>
+            You're eating Spanish fish if you live in New York, or Mexican fish if you live in Los Angeles!
+            
+      
+          </p>
           <p>
             Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
             dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
@@ -28,7 +33,7 @@ defineProps({
         <DistrictDonutsVisual />
       </div>
       <div v-if="!minimalMode" class="story-copy story-copy--bottom">
-        <CopyBlock title="Consectetur adipiscing elit">
+        <CopyBlock title="And here's what I will put at the end of the article">
           <p>
             Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
             Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est

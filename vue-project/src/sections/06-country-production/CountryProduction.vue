@@ -17,7 +17,15 @@ defineProps({
     <div class="country-production-shell">
       <SectionGrid class="country-production-grid" :columns="12" gap="1.25rem" align="start">
         <div v-if="!minimalMode" class="story-copy story-copy--top">
-          <CopyBlock title="Global Production">
+          <CopyBlock title="">
+            <p>
+              
+              
+            </p>
+            <p>
+              The gist of all this is that Bluefin tuna is farmed more than it is caught in the wild.
+              All those green dots on the map up above are farms 
+            </p>
             <p>
               The streamgraph tracks annual bluefin tuna imports by country. Stream thickness shows
               each country's volume contribution over time.

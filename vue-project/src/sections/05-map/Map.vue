@@ -39,8 +39,15 @@ const steps = [
       <div class="story-copy story-copy--top">
         <CopyBlock title="Lorem ipsum dolor sit amet">
           <p>
+            And some more lorem impsum:
             Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus
             posuere velit aliquet. Cras mattis consectetur purus sit amet fermentum. Curabitur blandit tempus porttitor.
+          </p>
+          <p>
+            Transition section tranistion section
+            Bluefin tuna is not caught in equal areas across the world, there are hotspots
+            These hotspots have unique climate challenges
+            These hotspots are also important for Farming tuna (really, ranching tuna)
           </p>
         </CopyBlock>
       </div>

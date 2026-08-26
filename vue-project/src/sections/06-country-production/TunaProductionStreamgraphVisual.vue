@@ -688,20 +688,23 @@ onUnmounted(() => {
 }
 
 .legend {
-  position: static;
-  flex: 0 0 auto;
+  position: absolute;
+  right: var(--viz-chart-margin-right);
+  bottom: calc(
+    var(--viz-chart-margin-bottom) + var(--viz-x-axis-band) + var(--viz-legend-above-axis-gap)
+  );
   z-index: 7;
   box-sizing: border-box;
   width: max-content;
-  max-width: calc(100% - var(--streamgraph-chart-margin-left, 84px) - var(--viz-chart-margin-right));
+  max-width: min(calc(280px * var(--story-scale)), 46vw);
   min-width: 0;
-  margin: 0.45rem var(--viz-chart-margin-right) 0 var(--streamgraph-chart-margin-left, 84px);
+  margin: 0;
   padding: var(--viz-legend-padding);
   border: var(--viz-legend-border);
   border-radius: 0;
   background: var(--viz-legend-bg);
   box-shadow: none;
-  overflow: visible;
+  overflow: auto;
 }
 
 .legend.legend--continents {
@@ -712,11 +715,10 @@ onUnmounted(() => {
   justify-content: flex-start;
   align-content: flex-start;
   gap: 0.35rem 0.65rem;
-  width: 100%;
-  max-width: calc(100% - var(--streamgraph-chart-margin-left, 84px) - var(--viz-chart-margin-right));
+  width: max-content;
+  max-width: min(calc(320px * var(--story-scale)), 52vw);
   box-sizing: border-box;
   padding: 0.45rem 0.65rem;
-  overflow: visible;
 }
 
 .legend-list {
@@ -887,9 +889,10 @@ onUnmounted(() => {
 
   .legend,
   .legend.legend--continents {
-    margin-left: 0.5rem;
-    margin-right: 0.5rem;
+    position: static;
+    margin: 0.45rem 0.5rem 0;
     max-width: calc(100% - 1rem);
+    overflow: visible;
   }
 }
 </style>
